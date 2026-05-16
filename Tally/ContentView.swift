@@ -32,10 +32,7 @@ struct ContentView: View {
             }
 
             Tab("More", systemImage: "ellipsis", value: 4) {
-                NavigationStack {
-                    Text("More")
-                        .navigationTitle("More")
-                }
+                MoreScreen()
             }
         }
         .onChange(of: selectedTab) { oldValue, newValue in
