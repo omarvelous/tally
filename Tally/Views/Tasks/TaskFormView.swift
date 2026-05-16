@@ -190,6 +190,10 @@ struct TaskFormView: View {
 
     // MARK: - Days
 
+    // Day display order: Sun(6), Mon(0), Tue(1), Wed(2), Thu(3), Fri(4), Sat(5)
+    private static let dayDisplayOrder = [6, 0, 1, 2, 3, 4, 5]
+    private static let dayDisplayLabels = ["Su", "M", "T", "W", "T", "F", "Sa"]
+
     private func daysSection(c: TallyColors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("DAYS")
@@ -198,17 +202,17 @@ struct TaskFormView: View {
                 .tracking(1.2)
                 .foregroundStyle(c.dim)
 
-            // Day grid
+            // Day grid — Sunday first
             HStack(spacing: 4) {
-                ForEach(0..<7, id: \.self) { i in
-                    let active = days.contains(i)
+                ForEach(Array(Self.dayDisplayOrder.enumerated()), id: \.offset) { displayIdx, dow in
+                    let active = days.contains(dow)
                     Button {
-                        if active { days.remove(i) } else { days.insert(i) }
+                        if active { days.remove(dow) } else { days.insert(dow) }
                     } label: {
-                        Text(dayLabels[i])
+                        Text(verbatim: Self.dayDisplayLabels[displayIdx])
                             .font(TallyFont.mono(13, weight: .semibold))
                             .frame(maxWidth: .infinity)
-                            .aspectRatio(1, contentMode: .fit)
+                            .frame(height: 40)
                             .background(active ? c.accent : Color.clear)
                             .foregroundStyle(active ? .white : c.dim)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
