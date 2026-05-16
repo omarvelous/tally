@@ -8,13 +8,13 @@ import SwiftData
 
 @Model
 final class TallySettings {
-    var dark: Bool
-    var density: String           // "regular" or "compact"
-    var showIcons: Bool
-    var quietHoursEnabled: Bool
-    var quietHoursStart: String   // "HH:MM"
-    var quietHoursEnd: String     // "HH:MM"
-    var hasOnboarded: Bool
+    var dark: Bool = false
+    var density: String = "regular"    // "regular" or "compact"
+    var showIcons: Bool = true
+    var quietHoursEnabled: Bool = false
+    var quietHoursStart: String = "22:00"
+    var quietHoursEnd: String = "06:30"
+    var hasOnboarded: Bool = false
 
     init(
         dark: Bool = false,

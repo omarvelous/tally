@@ -8,12 +8,12 @@ import SwiftData
 
 @Model
 final class LogEntry {
-    @Attribute(.unique) var id: String
-    var taskId: String
-    var date: String              // "YYYY-MM-DD"
-    var time: String              // "HH:MM"
-    var value: Double             // 1.0=true, 0.0=false for check/yesno; number for count/timer/numeric
-    var ts: Double                // unix ms, for sort order
+    var id: String = UUID().uuidString
+    var taskId: String = ""
+    var date: String = ""             // "YYYY-MM-DD"
+    var time: String = ""             // "HH:MM"
+    var value: Double = 0             // 1.0=true, 0.0=false for check/yesno; number for count/timer/numeric
+    var ts: Double = 0                // unix ms, for sort order
 
     init(
         id: String = UUID().uuidString,

@@ -8,18 +8,18 @@ import SwiftData
 
 @Model
 final class TallyTask {
-    @Attribute(.unique) var id: String
-    var name: String
-    var taskType: String          // TaskType raw value
+    var id: String = UUID().uuidString
+    var name: String = ""
+    var taskType: String = "check"   // TaskType raw value
     var target: Double?
     var unit: String?
-    var days: [Int]               // 0=Mon..6=Sun, empty=daily
-    var times: [String]           // ["HH:MM",...] or ["all-day"]
-    var notifPing: Bool
-    var notifNag: Bool
-    var notifSound: Bool
-    var archived: Bool
-    var createdAt: Double          // unix ms
+    var days: [Int] = []              // 0=Mon..6=Sun, empty=daily
+    var times: [String] = ["all-day"] // ["HH:MM",...] or ["all-day"]
+    var notifPing: Bool = true
+    var notifNag: Bool = false
+    var notifSound: Bool = true
+    var archived: Bool = false
+    var createdAt: Double = Date().timeIntervalSince1970 * 1000
 
     var type: TaskType {
         get { TaskType(rawValue: taskType) ?? .check }
