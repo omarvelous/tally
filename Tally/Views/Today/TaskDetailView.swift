@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 struct TaskDetailView: View {
     let taskId: String
@@ -376,10 +377,12 @@ struct TaskDetailView: View {
     private func logValue(_ value: Double, taskId: String, date: String, now: Date) {
         let entry = LogEntry(taskId: taskId, date: date, time: localTimeKey(now), value: value)
         modelContext.insert(entry)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func undoEntry(_ entry: LogEntry) {
         modelContext.delete(entry)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func entryValueText(task: TallyTask, entry: LogEntry) -> String {

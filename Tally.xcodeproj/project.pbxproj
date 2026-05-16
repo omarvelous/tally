@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C501A3AF2FB8A55D004854C0 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C501A3AE2FB8A55D004854C0 /* WidgetKit.framework */; };
+		C501A3B12FB8A55D004854C0 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C501A3B02FB8A55D004854C0 /* SwiftUI.framework */; };
+		C501A3BE2FB8A55F004854C0 /* TallyWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C501A3AC2FB8A55D004854C0 /* TallyWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		C501A30F2FB7F884004854C0 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,17 +27,68 @@
 			remoteGlobalIDString = C501A2FE2FB7F882004854C0;
 			remoteInfo = Tally;
 		};
+		C501A3BC2FB8A55F004854C0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C501A2F72FB7F882004854C0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C501A3AB2FB8A55D004854C0;
+			remoteInfo = TallyWidgetsExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C501A3C32FB8A55F004854C0 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C501A3BE2FB8A55F004854C0 /* TallyWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		C501A2FF2FB7F882004854C0 /* Tally.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tally.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C501A30E2FB7F884004854C0 /* TallyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TallyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C501A3182FB7F884004854C0 /* TallyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TallyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C501A3AC2FB8A55D004854C0 /* TallyWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TallyWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C501A3AE2FB8A55D004854C0 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		C501A3B02FB8A55D004854C0 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C501A3BF2FB8A55F004854C0 /* Exceptions for "TallyWidgets" folder in "TallyWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C501A3AB2FB8A55D004854C0 /* TallyWidgetsExtension */;
+		};
+		C501A3C52FB8A6E6004854C0 /* Exceptions for "Tally" folder in "TallyWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Logic/DateHelpers.swift,
+				Logic/DayCompletion.swift,
+				Logic/Streak.swift,
+				Logic/TaskState.swift,
+				Models/LogEntry.swift,
+				Models/TallySettings.swift,
+				Models/TallyTask.swift,
+				Models/TaskType.swift,
+			);
+			target = C501A3AB2FB8A55D004854C0 /* TallyWidgetsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C501A3012FB7F882004854C0 /* Tally */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C501A3C52FB8A6E6004854C0 /* Exceptions for "Tally" folder in "TallyWidgetsExtension" target */,
+			);
 			path = Tally;
 			sourceTree = "<group>";
 		};
@@ -43,6 +100,14 @@
 		C501A31B2FB7F884004854C0 /* TallyUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = TallyUITests;
+			sourceTree = "<group>";
+		};
+		C501A3B22FB8A55D004854C0 /* TallyWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C501A3BF2FB8A55F004854C0 /* Exceptions for "TallyWidgets" folder in "TallyWidgetsExtension" target */,
+			);
+			path = TallyWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -69,6 +134,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C501A3A92FB8A55D004854C0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C501A3B12FB8A55D004854C0 /* SwiftUI.framework in Frameworks */,
+				C501A3AF2FB8A55D004854C0 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -78,6 +152,8 @@
 				C501A3012FB7F882004854C0 /* Tally */,
 				C501A3112FB7F884004854C0 /* TallyTests */,
 				C501A31B2FB7F884004854C0 /* TallyUITests */,
+				C501A3B22FB8A55D004854C0 /* TallyWidgets */,
+				C501A3AD2FB8A55D004854C0 /* Frameworks */,
 				C501A3002FB7F882004854C0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,8 +164,18 @@
 				C501A2FF2FB7F882004854C0 /* Tally.app */,
 				C501A30E2FB7F884004854C0 /* TallyTests.xctest */,
 				C501A3182FB7F884004854C0 /* TallyUITests.xctest */,
+				C501A3AC2FB8A55D004854C0 /* TallyWidgetsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C501A3AD2FB8A55D004854C0 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C501A3AE2FB8A55D004854C0 /* WidgetKit.framework */,
+				C501A3B02FB8A55D004854C0 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -102,10 +188,12 @@
 				C501A2FB2FB7F882004854C0 /* Sources */,
 				C501A2FC2FB7F882004854C0 /* Frameworks */,
 				C501A2FD2FB7F882004854C0 /* Resources */,
+				C501A3C32FB8A55F004854C0 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C501A3BD2FB8A55F004854C0 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				C501A3012FB7F882004854C0 /* Tally */,
@@ -163,6 +251,28 @@
 			productReference = C501A3182FB7F884004854C0 /* TallyUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		C501A3AB2FB8A55D004854C0 /* TallyWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C501A3C02FB8A55F004854C0 /* Build configuration list for PBXNativeTarget "TallyWidgetsExtension" */;
+			buildPhases = (
+				C501A3A82FB8A55D004854C0 /* Sources */,
+				C501A3A92FB8A55D004854C0 /* Frameworks */,
+				C501A3AA2FB8A55D004854C0 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C501A3B22FB8A55D004854C0 /* TallyWidgets */,
+			);
+			name = TallyWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = TallyWidgetsExtension;
+			productReference = C501A3AC2FB8A55D004854C0 /* TallyWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -184,6 +294,9 @@
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = C501A2FE2FB7F882004854C0;
 					};
+					C501A3AB2FB8A55D004854C0 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = C501A2FA2FB7F882004854C0 /* Build configuration list for PBXProject "Tally" */;
@@ -203,6 +316,7 @@
 				C501A2FE2FB7F882004854C0 /* Tally */,
 				C501A30D2FB7F884004854C0 /* TallyTests */,
 				C501A3172FB7F884004854C0 /* TallyUITests */,
+				C501A3AB2FB8A55D004854C0 /* TallyWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -223,6 +337,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C501A3162FB7F884004854C0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C501A3AA2FB8A55D004854C0 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -253,6 +374,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C501A3A82FB8A55D004854C0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -265,6 +393,11 @@
 			isa = PBXTargetDependency;
 			target = C501A2FE2FB7F882004854C0 /* Tally */;
 			targetProxy = C501A3192FB7F884004854C0 /* PBXContainerItemProxy */;
+		};
+		C501A3BD2FB8A55F004854C0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C501A3AB2FB8A55D004854C0 /* TallyWidgetsExtension */;
+			targetProxy = C501A3BC2FB8A55F004854C0 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -530,6 +663,64 @@
 			};
 			name = Release;
 		};
+		C501A3C12FB8A55F004854C0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TallyWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TallyWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = omarvelous.Tally.TallyWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C501A3C22FB8A55F004854C0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TallyWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TallyWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = omarvelous.Tally.TallyWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -565,6 +756,15 @@
 			buildConfigurations = (
 				C501A3292FB7F884004854C0 /* Debug */,
 				C501A32A2FB7F884004854C0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C501A3C02FB8A55F004854C0 /* Build configuration list for PBXNativeTarget "TallyWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C501A3C12FB8A55F004854C0 /* Debug */,
+				C501A3C22FB8A55F004854C0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
