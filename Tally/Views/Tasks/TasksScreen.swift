@@ -2,28 +2,33 @@
 //  TasksScreen.swift
 //  Tally
 //
-//  Tasks library: all tasks ranked by 14-day completion rate.
+//  Tasks library: active + archived views, swipe-to-log, sort toggle.
 
 import SwiftUI
 import SwiftData
 
 struct TasksScreen: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Query(filter: #Predicate<TallyTask> { !$0.archived }) private var tasks: [TallyTask]
+    @Environment(LogSheetCoordinator.self) private var logCoordinator
+    @Query private var allTasks: [TallyTask]
     @Query private var allEntries: [LogEntry]
 
     @State private var sortBy: SortOption = .rate
+    @State private var viewFilter: ViewFilter = .active
     @State private var showAddTask = false
 
-    enum SortOption: String {
-        case rate, name
-    }
+    enum SortOption: String { case rate, name }
+    enum ViewFilter: String { case active, archived }
+
+    private var activeTasks: [TallyTask] { allTasks.filter { !$0.archived } }
+    private var archivedTasks: [TallyTask] { allTasks.filter { $0.archived } }
 
     var body: some View {
         let c = TallyColors.resolve(colorScheme)
         let now = Date()
+        let visibleTasks = viewFilter == .active ? activeTasks : archivedTasks
 
-        let rated = tasks.map { task -> (TallyTask, [Double], Int) in
+        let rated = visibleTasks.map { task -> (TallyTask, [Double], Int) in
             let hist = taskHistoryFor(task: task, entries: allEntries, now: now)
             let rate = hist.isEmpty ? 0 : Int((hist.reduce(0, +) / Double(hist.count) * 100).rounded())
             return (task, hist, rate)
@@ -42,7 +47,7 @@ struct TasksScreen: View {
                     // Header
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("LIBRARY · \(tasks.count) ACTIVE")
+                            Text(verbatim: "LIBRARY · \(activeTasks.count) ACTIVE · \(archivedTasks.count) ARCHIVED")
                                 .font(TallyFont.label())
                                 .textCase(.uppercase)
                                 .tracking(1.2)
@@ -69,18 +74,21 @@ struct TasksScreen: View {
                     }
                     .padding(.top, 8)
 
-                    // Sort tabs
+                    // Filter + Sort chips
                     HStack(spacing: 4) {
+                        filterChip("ACTIVE · \(activeTasks.count)", filter: .active, c: c)
+                        filterChip("ARCHIVED · \(archivedTasks.count)", filter: .archived, c: c)
+                        Spacer()
                         sortButton("BY RATE", option: .rate, c: c)
                         sortButton("BY NAME", option: .name, c: c)
                     }
 
                     if sorted.isEmpty {
                         VStack(spacing: 6) {
-                            Text("No tasks yet")
+                            Text(viewFilter == .active ? "No tasks yet" : "No archived tasks")
                                 .font(TallyFont.heading(18, weight: .medium))
                                 .foregroundStyle(c.text)
-                            Text("Add your first task to start tracking.")
+                            Text(viewFilter == .active ? "Add your first task to start tracking." : "Archived tasks will appear here.")
                                 .font(TallyFont.body(13))
                                 .foregroundStyle(c.dim)
                         }
@@ -89,13 +97,27 @@ struct TasksScreen: View {
                     } else {
                         // Task rows
                         ForEach(sorted, id: \.0.id) { task, hist, rate in
-                            NavigationLink(value: task.id) {
-                                taskRow(task: task, hist: hist, rate: rate, c: c)
+                            if viewFilter == .active {
+                                SwipeableRow(pillLabel: "LOG →", pillColor: c.pos) {
+                                    logCoordinator.open(task.id)
+                                } content: {
+                                    NavigationLink(value: task.id) {
+                                        taskRow(task: task, hist: hist, rate: rate, isArchived: false, c: c)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            } else {
+                                // Archived: tap only, no swipe
+                                NavigationLink(value: task.id) {
+                                    taskRow(task: task, hist: hist, rate: rate, isArchived: true, c: c)
+                                }
+                                .buttonStyle(.plain)
+                                .opacity(0.6)
                             }
-                            .buttonStyle(.plain)
                         }
 
-                        Text("TAP A TASK FOR FULL STATS")
+                        // Footer hint
+                        Text(viewFilter == .active ? "TAP TO VIEW · SWIPE LEFT TO LOG" : "TAP TO REVIEW + RESTORE")
                             .font(TallyFont.mono(10))
                             .tracking(1.4)
                             .foregroundStyle(c.dim)
@@ -116,6 +138,24 @@ struct TasksScreen: View {
         }
     }
 
+    // MARK: - Chips
+
+    private func filterChip(_ label: String, filter: ViewFilter, c: TallyColors) -> some View {
+        Button {
+            viewFilter = filter
+        } label: {
+            Text(verbatim: label)
+                .font(TallyFont.mono(10, weight: .semibold))
+                .tracking(1.0)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(viewFilter == filter ? c.accentSoft : Color.clear)
+                .foregroundStyle(viewFilter == filter ? c.accent : c.dim)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+    }
+
     private func sortButton(_ label: String, option: SortOption, c: TallyColors) -> some View {
         Button {
             sortBy = option
@@ -132,10 +172,12 @@ struct TasksScreen: View {
         .buttonStyle(.plain)
     }
 
-    private func taskRow(task: TallyTask, hist: [Double], rate: Int, c: TallyColors) -> some View {
+    // MARK: - Task row
+
+    private func taskRow(task: TallyTask, hist: [Double], rate: Int, isArchived: Bool, c: TallyColors) -> some View {
         let sched = describeSchedule(task)
-        let rateColor = rate >= 90 ? c.pos : rate >= 70 ? c.text : c.neg
-        let dotColor = rate >= 90 ? c.pos : rate >= 70 ? c.accent : c.neg
+        let rateColor = isArchived ? c.dim : (rate >= 90 ? c.pos : rate >= 70 ? c.text : c.neg)
+        let dotColor = isArchived ? c.dim3 : (rate >= 90 ? c.pos : rate >= 70 ? c.accent : c.neg)
 
         return HStack(spacing: 10) {
             Circle()
@@ -145,8 +187,8 @@ struct TasksScreen: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.name)
                     .font(TallyFont.heading(14, weight: .medium))
-                    .foregroundStyle(c.text)
-                Text("\(sched.days.uppercased()) · \(sched.times.uppercased()) · \(task.type.rawValue.uppercased())\(task.target != nil ? " · \(Int(task.target!)) \(task.unit ?? "")" : "")")
+                    .foregroundStyle(isArchived ? c.dim : c.text)
+                Text(verbatim: "\(sched.days.uppercased()) · \(sched.times.uppercased()) · \(task.type.rawValue.uppercased())\(task.target != nil ? " · \(Int(task.target!)) \(task.unit ?? "")" : "")")
                     .font(TallyFont.mono(10))
                     .foregroundStyle(c.dim)
                     .lineLimit(1)
@@ -156,7 +198,7 @@ struct TasksScreen: View {
 
             SparklineView(values: hist, width: 48, height: 16)
 
-            Text("\(rate)%")
+            Text(verbatim: "\(rate)%")
                 .font(TallyFont.mono(11, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(rateColor)
