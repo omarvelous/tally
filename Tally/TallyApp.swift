@@ -10,6 +10,9 @@ import SwiftData
 
 @main
 struct TallyApp: App {
+    @State private var notificationScheduler = NotificationScheduler()
+    @State private var midnightObserver = MidnightObserver()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             TallyTask.self,
@@ -28,7 +31,27 @@ struct TallyApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(notificationScheduler)
+                .environment(midnightObserver)
+                .task {
+                    await notificationScheduler.requestPermission()
+                    scheduleNotifications()
+                }
         }
         .modelContainer(sharedModelContainer)
+    }
+
+    @MainActor
+    private func scheduleNotifications() {
+        let context = sharedModelContainer.mainContext
+        let tasks = (try? context.fetch(FetchDescriptor<TallyTask>())) ?? []
+        let settings = (try? context.fetch(FetchDescriptor<TallySettings>()))?.first
+
+        notificationScheduler.rescheduleAll(
+            tasks: tasks,
+            quietHoursEnabled: settings?.quietHoursEnabled ?? false,
+            quietStart: settings?.quietHoursStart ?? "22:00",
+            quietEnd: settings?.quietHoursEnd ?? "06:30"
+        )
     }
 }

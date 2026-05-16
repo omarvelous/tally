@@ -11,6 +11,7 @@ import Combine
 struct TodayScreen: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(MidnightObserver.self) private var midnightObserver
     @Query(filter: #Predicate<TallyTask> { !$0.archived }) private var tasks: [TallyTask]
     @Query private var allEntries: [LogEntry]
 
@@ -53,6 +54,7 @@ struct TodayScreen: View {
             }
         }
         .onReceive(timer) { tick = $0 }
+        .onChange(of: midnightObserver.currentDateKey) { _, _ in tick = Date() }
     }
 
     // MARK: - Header
