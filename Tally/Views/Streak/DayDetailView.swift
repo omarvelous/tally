@@ -21,7 +21,7 @@ struct DayDetailView: View {
         let dow = dayOfWeek(dateObj)
         let day = dayCompletionFor(date: dateObj, tasks: tasks, entries: allEntries, now: now)
         let scheduled = tasks.filter { $0.isScheduled(on: dow) }
-        let dayLog = allEntries.filter { $0.date == dateString }.sorted { $0.time < $1.time }
+        let dayLog = allEntries.filter { $0.date == dateString && !$0.deleted }.sorted { $0.time < $1.time }
 
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {

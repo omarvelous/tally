@@ -15,6 +15,7 @@ final class LogEntry {
     var value: Double = 0             // 1.0=true, 0.0=false for check/yesno; number for count/timer/numeric
     var ts: Double = 0                // unix ms, for sort order
     var tz: String = TimeZone.current.identifier  // timezone at time of logging, e.g. "America/New_York"
+    var deleted: Bool = false          // soft delete — hidden from UI, data preserved
 
     init(
         id: String = UUID().uuidString,

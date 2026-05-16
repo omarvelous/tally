@@ -91,6 +91,7 @@ final class TallySettings {
 
     var hasOnboarded: Bool
 }
+```
 
 Current architecture principles:
 

@@ -224,7 +224,7 @@ struct TaskStatsView: View {
     // MARK: - Hourly heatmap
 
     private func hourlyHeatmap(taskId: String, c: TallyColors) -> some View {
-        let entries = allEntries.filter { $0.taskId == taskId }
+        let entries = allEntries.filter { $0.taskId == taskId && !$0.deleted }
         var byHour = Array(repeating: 0, count: 24)
         for e in entries {
             let h = parseHHMM(e.time).h
@@ -267,7 +267,7 @@ struct TaskStatsView: View {
 
     private func recentEntries(task: TallyTask, c: TallyColors) -> some View {
         let recent = allEntries
-            .filter { $0.taskId == task.id }
+            .filter { $0.taskId == task.id && !$0.deleted }
             .sorted { $0.ts > $1.ts }
             .prefix(8)
 

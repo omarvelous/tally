@@ -29,7 +29,7 @@ struct LogSheet: View {
         if let task = tasks.first(where: { $0.id == taskId }) {
             let state = taskStateFor(task: task, date: startOfDay(now), entries: allEntries, now: now)
             let todayEntries = allEntries
-                .filter { $0.taskId == taskId && $0.date == todayKey }
+                .filter { $0.taskId == taskId && $0.date == todayKey && !$0.deleted }
                 .sorted { $0.time < $1.time }
             let sched = describeSchedule(task)
 
@@ -93,7 +93,7 @@ struct LogSheet: View {
             ) {
                 Button("Delete entry", role: .destructive) {
                     if let entry = deleteTarget {
-                        modelContext.delete(entry)
+                        entry.deleted = true  // soft delete — data preserved
                         WidgetCenter.shared.reloadAllTimelines()
                         deleteTarget = nil
                     }
