@@ -334,6 +334,7 @@ struct TaskStatsView: View {
             }
             manageRow(task.archived ? "Restore task" : "Archive task", icon: "archivebox", c: c) {
                 task.archived.toggle()
+                task.updatedAt = Date().timeIntervalSince1970 * 1000
                 dismiss()
             }
             manageRow("Delete task", icon: "trash", c: c, danger: true) {
@@ -366,12 +367,7 @@ struct TaskStatsView: View {
     }
 
     private func deleteTask(_ task: TallyTask) {
-        let taskId = task.id
-        let descriptor = FetchDescriptor<LogEntry>(predicate: #Predicate { $0.taskId == taskId })
-        if let entries = try? modelContext.fetch(descriptor) {
-            for entry in entries { modelContext.delete(entry) }
-        }
-        modelContext.delete(task)
+        deleteTaskAndEntries(taskId: task.id, context: modelContext)
         dismiss()
     }
 }
