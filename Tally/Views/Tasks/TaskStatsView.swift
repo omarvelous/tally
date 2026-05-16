@@ -11,8 +11,14 @@ struct TaskStatsView: View {
     let taskId: String
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Environment(LogSheetCoordinator.self) private var logCoordinator
     @Query private var tasks: [TallyTask]
     @Query private var allEntries: [LogEntry]
+
+    @State private var showEditSheet = false
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         let c = TallyColors.resolve(colorScheme)
@@ -52,6 +58,9 @@ struct TaskStatsView: View {
 
                     // Recent entries
                     recentEntries(task: task, c: c)
+
+                    // MANAGE section
+                    manageSection(task: task, c: c)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -59,6 +68,27 @@ struct TaskStatsView: View {
             .background(c.bg)
             .navigationTitle(task.name)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        logCoordinator.open(task.id)
+                    } label: {
+                        Text("+ LOG")
+                            .font(TallyFont.mono(11, weight: .semibold))
+                            .foregroundStyle(c.accent)
+                    }
+                }
+            }
+            .sheet(isPresented: $showEditSheet) {
+                TaskFormView(taskId: task.id)
+            }
+            .confirmationDialog("Delete \"\(task.name)\"?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete task & all history", role: .destructive) {
+                    deleteTask(task)
+                }
+            } message: {
+                Text("All log entries for this task will be permanently removed.")
+            }
         } else {
             Text("Task not found")
         }
@@ -286,5 +316,62 @@ struct TaskStatsView: View {
         case .numeric: return String(format: "%.1f", entry.value)
         case .count, .timer: return "+\(Int(entry.value))"
         }
+    }
+
+    // MARK: - Manage section
+
+    private func manageSection(task: TallyTask, c: TallyColors) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("MANAGE")
+                .font(TallyFont.label())
+                .textCase(.uppercase)
+                .tracking(1.2)
+                .foregroundStyle(c.dim)
+                .padding(.bottom, 8)
+
+            manageRow("Edit task", icon: "pencil", c: c) {
+                showEditSheet = true
+            }
+            manageRow(task.archived ? "Restore task" : "Archive task", icon: "archivebox", c: c) {
+                task.archived.toggle()
+                dismiss()
+            }
+            manageRow("Delete task", icon: "trash", c: c, danger: true) {
+                showDeleteConfirm = true
+            }
+        }
+    }
+
+    private func manageRow(_ label: String, icon: String, c: TallyColors, danger: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundStyle(danger ? c.neg : c.dim)
+                    .frame(width: 20)
+                Text(label)
+                    .font(TallyFont.heading(14, weight: .medium))
+                    .foregroundStyle(danger ? c.neg : c.text)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(c.dim)
+            }
+            .padding(.vertical, 13)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(c.rule).frame(height: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func deleteTask(_ task: TallyTask) {
+        let taskId = task.id
+        let descriptor = FetchDescriptor<LogEntry>(predicate: #Predicate { $0.taskId == taskId })
+        if let entries = try? modelContext.fetch(descriptor) {
+            for entry in entries { modelContext.delete(entry) }
+        }
+        modelContext.delete(task)
+        dismiss()
     }
 }
