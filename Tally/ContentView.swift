@@ -6,18 +6,17 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedTab = 0
     @State private var showAddTask = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
             Tab("Today", systemImage: "calendar", value: 0) {
-                NavigationStack {
-                    Text("Today")
-                        .navigationTitle("Today")
-                }
+                TodayScreen()
             }
 
             Tab("Tasks", systemImage: "list.bullet", value: 1) {
@@ -28,7 +27,6 @@ struct ContentView: View {
             }
 
             Tab("Add", systemImage: "plus.circle.fill", value: 2) {
-                // Placeholder — replaced by sheet presentation
                 Color.clear
             }
 
@@ -56,9 +54,15 @@ struct ContentView: View {
             Text("Add Task")
                 .presentationDetents([.large])
         }
+        .onAppear {
+            #if DEBUG
+            SeedData.seedIfNeeded(context: modelContext)
+            #endif
+        }
     }
 }
 
 #Preview {
     ContentView()
+        .modelContainer(for: [TallyTask.self, LogEntry.self, TallySettings.self], inMemory: true)
 }
