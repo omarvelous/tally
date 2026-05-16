@@ -11,13 +11,12 @@ struct MoreScreen: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
     @Query(filter: #Predicate<TallyTask> { !$0.archived }) private var activeTasks: [TallyTask]
-    @Query private var allTasks: [TallyTask]
     @Query private var settings: [TallySettings]
 
     @State private var showOnboarding = false
-    @State private var showManage = false
+    @State private var showProfile = false
     @State private var showReminders = false
-    @State private var showAddTask = false
+    @State private var showAuthFlow = false
     @State private var showResetConfirm = false
 
     private var currentSettings: TallySettings {
@@ -43,28 +42,31 @@ struct MoreScreen: View {
                     }
                     .padding(.top, 8)
 
-                    // Profile card
-                    TallyCard {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Tally")
-                                    .font(TallyFont.heading(16, weight: .medium))
-                                    .foregroundStyle(c.text)
-                                Text(verbatim: "\(activeTasks.count) ACTIVE TASKS")
-                                    .font(TallyFont.mono(11))
-                                    .foregroundStyle(c.dim)
+                    // Profile card (tappable)
+                    Button { showProfile = true } label: {
+                        TallyCard {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(currentSettings.name.isEmpty ? "Tally" : currentSettings.name)
+                                        .font(TallyFont.heading(16, weight: .medium))
+                                        .foregroundStyle(c.text)
+                                    Text(verbatim: "\(activeTasks.count) ACTIVE TASKS")
+                                        .font(TallyFont.mono(11))
+                                        .foregroundStyle(c.dim)
+                                }
+                                Spacer()
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(c.accent)
+                                    .frame(width: 44, height: 44)
+                                    .overlay(
+                                        Text(verbatim: currentSettings.derivedInitials)
+                                            .font(TallyFont.heading(18, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                    )
                             }
-                            Spacer()
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(c.accent)
-                                .frame(width: 44, height: 44)
-                                .overlay(
-                                    Text("T")
-                                        .font(TallyFont.heading(18, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                )
                         }
                     }
+                    .buttonStyle(.plain)
 
                     // Appearance
                     settingsSection("APPEARANCE", c: c) {
@@ -97,27 +99,24 @@ struct MoreScreen: View {
                         }
                     }
 
-                    // Tasks
-                    settingsSection("TASKS", c: c) {
-                        navRow("Manage tasks (\(allTasks.count))", sub: "Edit · archive · delete", c: c) {
-                            showManage = true
+                    // Preview · Auth flows
+                    settingsSection("PREVIEW · AUTH FLOWS", c: c) {
+                        navRow("Sign in / Create account", sub: "Preview auth screens", c: c) {
+                            showAuthFlow = true
                         }
-                        navRow("Add task", sub: "New scheduled task", c: c) {
-                            showAddTask = true
+                        navRow("View onboarding", sub: "Replay the welcome screen", c: c) {
+                            showOnboarding = true
                         }
                     }
 
                     // Data
                     settingsSection("DATA", c: c) {
-                        navRow("View onboarding", sub: "Replay the welcome screen", c: c) {
-                            showOnboarding = true
-                        }
                         navRow("Reset data", sub: "Wipe all tasks and entries", c: c, danger: true) {
                             showResetConfirm = true
                         }
                     }
 
-                    Text("TALLY · v1.0")
+                    Text("TALLY · v2.0")
                         .font(TallyFont.mono(10))
                         .tracking(1.4)
                         .foregroundStyle(c.dim)
@@ -132,14 +131,14 @@ struct MoreScreen: View {
         .sheet(isPresented: $showOnboarding) {
             OnboardingView()
         }
-        .sheet(isPresented: $showManage) {
-            ManageTasksView()
+        .sheet(isPresented: $showProfile) {
+            ProfileEditorView()
         }
         .sheet(isPresented: $showReminders) {
             RemindersView()
         }
-        .sheet(isPresented: $showAddTask) {
-            TaskFormView(taskId: nil)
+        .sheet(isPresented: $showAuthFlow) {
+            AuthFlowView()
         }
         .confirmationDialog("Reset all data?", isPresented: $showResetConfirm, titleVisibility: .visible) {
             Button("Reset everything", role: .destructive) { resetData() }
