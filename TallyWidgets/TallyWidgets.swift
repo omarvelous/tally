@@ -41,7 +41,7 @@ struct TallyTimelineProvider: TimelineProvider {
 
     private func computeEntry() -> TallyEntry {
         do {
-            let container = try ModelContainer(for: TallyTask.self, LogEntry.self, TallySettings.self)
+            let container = try ModelContainerFactory.create()
             let context = ModelContext(container)
 
             let tasks = try context.fetch(FetchDescriptor<TallyTask>())
@@ -219,7 +219,7 @@ struct TodayChecklistProvider: TimelineProvider {
 
     private func computeEntry() -> TodayChecklistEntry {
         do {
-            let container = try ModelContainer(for: TallyTask.self, LogEntry.self, TallySettings.self)
+            let container = try ModelContainerFactory.create()
             let context = ModelContext(container)
 
             let allTasks = try context.fetch(FetchDescriptor<TallyTask>())
