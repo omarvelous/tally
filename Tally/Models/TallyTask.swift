@@ -20,6 +20,7 @@ final class TallyTask {
     var notifSound: Bool = true
     var archived: Bool = false
     var createdAt: Double = Date().timeIntervalSince1970 * 1000
+    var updatedAt: Double = Date().timeIntervalSince1970 * 1000
 
     var type: TaskType {
         get { TaskType(rawValue: taskType) ?? .check }

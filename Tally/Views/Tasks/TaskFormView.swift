@@ -384,6 +384,7 @@ struct TaskFormView: View {
             task.unit = finalUnit
             task.days = finalDays
             task.times = finalTimes
+            task.updatedAt = Date().timeIntervalSince1970 * 1000
         } else {
             let task = TallyTask(
                 name: trimmedName,
@@ -400,19 +401,8 @@ struct TaskFormView: View {
 
     private func deleteTask() {
         guard let task = existing else { return }
-        // Delete all entries for this task
-        let taskId = task.id
-        let entriesToDelete = allEntries(for: taskId)
-        for entry in entriesToDelete {
-            modelContext.delete(entry)
-        }
-        modelContext.delete(task)
+        deleteTaskAndEntries(taskId: task.id, context: modelContext)
         dismiss()
-    }
-
-    private func allEntries(for taskId: String) -> [LogEntry] {
-        let descriptor = FetchDescriptor<LogEntry>(predicate: #Predicate { $0.taskId == taskId })
-        return (try? modelContext.fetch(descriptor)) ?? []
     }
 
     private func suggestUnit(for newType: TaskType) {

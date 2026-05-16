@@ -224,7 +224,7 @@ struct TaskStatsView: View {
     // MARK: - Hourly heatmap
 
     private func hourlyHeatmap(taskId: String, c: TallyColors) -> some View {
-        let entries = allEntries.filter { $0.taskId == taskId }
+        let entries = allEntries.filter { $0.taskId == taskId && !$0.deleted }
         var byHour = Array(repeating: 0, count: 24)
         for e in entries {
             let h = parseHHMM(e.time).h
@@ -267,7 +267,7 @@ struct TaskStatsView: View {
 
     private func recentEntries(task: TallyTask, c: TallyColors) -> some View {
         let recent = allEntries
-            .filter { $0.taskId == task.id }
+            .filter { $0.taskId == task.id && !$0.deleted }
             .sorted { $0.ts > $1.ts }
             .prefix(8)
 
@@ -334,6 +334,7 @@ struct TaskStatsView: View {
             }
             manageRow(task.archived ? "Restore task" : "Archive task", icon: "archivebox", c: c) {
                 task.archived.toggle()
+                task.updatedAt = Date().timeIntervalSince1970 * 1000
                 dismiss()
             }
             manageRow("Delete task", icon: "trash", c: c, danger: true) {
@@ -366,12 +367,7 @@ struct TaskStatsView: View {
     }
 
     private func deleteTask(_ task: TallyTask) {
-        let taskId = task.id
-        let descriptor = FetchDescriptor<LogEntry>(predicate: #Predicate { $0.taskId == taskId })
-        if let entries = try? modelContext.fetch(descriptor) {
-            for entry in entries { modelContext.delete(entry) }
-        }
-        modelContext.delete(task)
+        deleteTaskAndEntries(taskId: task.id, context: modelContext)
         dismiss()
     }
 }

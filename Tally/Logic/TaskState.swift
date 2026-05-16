@@ -32,7 +32,7 @@ func taskStateFor(task: TallyTask, date: Date, entries: [LogEntry], now: Date) -
         return TaskStatus(status: .off, pct: 0, sum: nil, label: "Not scheduled", count: 0, value: nil)
     }
 
-    let taskEntries = entries.filter { $0.taskId == task.id && $0.date == key }
+    let taskEntries = entries.filter { $0.taskId == task.id && $0.date == key && !$0.deleted }
     let isPastDate = startOfDay(date) < startOfDay(now)
     let isFutureDate = startOfDay(date) > startOfDay(now)
 

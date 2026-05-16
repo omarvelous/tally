@@ -75,9 +75,11 @@
 				Logic/Streak.swift,
 				Logic/TaskState.swift,
 				Models/LogEntry.swift,
+				Models/TallySchema.swift,
 				Models/TallySettings.swift,
 				Models/TallyTask.swift,
 				Models/TaskType.swift,
+				Services/ModelContainerFactory.swift,
 			);
 			target = C501A3AB2FB8A55D004854C0 /* TallyWidgetsExtension */;
 		};

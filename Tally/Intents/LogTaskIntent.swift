@@ -20,7 +20,7 @@ struct LogTaskIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let container = try ModelContainer(for: TallyTask.self, LogEntry.self, TallySettings.self)
+        let container = try ModelContainerFactory.create()
         let context = container.mainContext
 
         // Find the task

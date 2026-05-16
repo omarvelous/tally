@@ -34,7 +34,7 @@ struct TaskEntityQuery: EntityQuery {
 
     @MainActor
     private func fetchAllTasks() throws -> [TallyTask] {
-        let container = try ModelContainer(for: TallyTask.self, LogEntry.self, TallySettings.self)
+        let container = try ModelContainerFactory.create()
         let context = container.mainContext
         return try context.fetch(FetchDescriptor<TallyTask>())
     }

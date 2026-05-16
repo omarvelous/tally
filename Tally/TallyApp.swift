@@ -14,19 +14,8 @@ struct TallyApp: App {
     @State private var midnightObserver = MidnightObserver()
 
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            TallyTask.self,
-            LogEntry.self,
-            TallySettings.self,
-        ])
-        let modelConfiguration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            cloudKitDatabase: .automatic
-        )
-
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainerFactory.create()
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
