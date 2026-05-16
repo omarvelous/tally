@@ -28,10 +28,7 @@ struct ContentView: View {
             }
 
             Tab("Streak", systemImage: "flame", value: 3) {
-                NavigationStack {
-                    Text("Streak")
-                        .navigationTitle("Streak")
-                }
+                StreakScreen()
             }
 
             Tab("More", systemImage: "ellipsis", value: 4) {
