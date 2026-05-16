@@ -14,6 +14,7 @@ final class LogEntry {
     var time: String = ""             // "HH:MM"
     var value: Double = 0             // 1.0=true, 0.0=false for check/yesno; number for count/timer/numeric
     var ts: Double = 0                // unix ms, for sort order
+    var tz: String = TimeZone.current.identifier  // timezone at time of logging, e.g. "America/New_York"
 
     init(
         id: String = UUID().uuidString,
@@ -21,7 +22,8 @@ final class LogEntry {
         date: String,
         time: String,
         value: Double,
-        ts: Double = Date().timeIntervalSince1970 * 1000
+        ts: Double = Date().timeIntervalSince1970 * 1000,
+        tz: String = TimeZone.current.identifier
     ) {
         self.id = id
         self.taskId = taskId
@@ -29,5 +31,6 @@ final class LogEntry {
         self.time = time
         self.value = value
         self.ts = ts
+        self.tz = tz
     }
 }
