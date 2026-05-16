@@ -54,5 +54,7 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+        .environment(NotificationScheduler())
+        .environment(MidnightObserver())
         .modelContainer(for: [TallyTask.self, LogEntry.self, TallySettings.self], inMemory: true)
 }
