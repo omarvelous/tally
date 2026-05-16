@@ -20,10 +20,7 @@ struct ContentView: View {
             }
 
             Tab("Tasks", systemImage: "list.bullet", value: 1) {
-                NavigationStack {
-                    Text("Tasks")
-                        .navigationTitle("Tasks")
-                }
+                TasksScreen()
             }
 
             Tab("Add", systemImage: "plus.circle.fill", value: 2) {
@@ -51,8 +48,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showAddTask) {
-            Text("Add Task")
-                .presentationDetents([.large])
+            TaskFormView(taskId: nil)
         }
         .onAppear {
             #if DEBUG
