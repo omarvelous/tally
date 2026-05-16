@@ -11,7 +11,7 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var selectedTab = 0
-    @State private var showAddTask = false
+    @State private var logCoordinator = LogSheetCoordinator()
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -23,26 +23,19 @@ struct ContentView: View {
                 TasksScreen()
             }
 
-            Tab("Add", systemImage: "plus.circle.fill", value: 2) {
-                Color.clear
-            }
-
-            Tab("Streak", systemImage: "flame", value: 3) {
+            Tab("Streak", systemImage: "flame", value: 2) {
                 StreakScreen()
             }
 
-            Tab("More", systemImage: "ellipsis", value: 4) {
+            Tab("More", systemImage: "ellipsis", value: 3) {
                 MoreScreen()
             }
         }
-        .onChange(of: selectedTab) { oldValue, newValue in
-            if newValue == 2 {
-                selectedTab = oldValue
-                showAddTask = true
-            }
-        }
-        .sheet(isPresented: $showAddTask) {
-            TaskFormView(taskId: nil)
+        .environment(logCoordinator)
+        .sheet(item: $logCoordinator.logTaskId) { taskId in
+            LogSheet(taskId: taskId)
+                .presentationDetents([.fraction(0.95)])
+                .presentationDragIndicator(.visible)
         }
         .onAppear {
             #if DEBUG

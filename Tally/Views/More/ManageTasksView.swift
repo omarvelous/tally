@@ -110,8 +110,3 @@ struct ManageTasksView: View {
         modelContext.delete(task)
     }
 }
-
-// Make String conform to Identifiable for sheet(item:)
-extension String: @retroactive Identifiable {
-    public var id: String { self }
-}

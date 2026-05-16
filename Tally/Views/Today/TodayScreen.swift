@@ -12,10 +12,12 @@ struct TodayScreen: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @Environment(MidnightObserver.self) private var midnightObserver
+    @Environment(LogSheetCoordinator.self) private var logCoordinator
     @Query(filter: #Predicate<TallyTask> { !$0.archived }) private var tasks: [TallyTask]
     @Query private var allEntries: [LogEntry]
 
     @State private var tick = Date()
+    @State private var showAddTask = false
     private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -49,9 +51,9 @@ struct TodayScreen: View {
                 .padding(.bottom, 20)
             }
             .background(c.bg)
-            .navigationDestination(for: String.self) { taskId in
-                TaskDetailView(taskId: taskId)
-            }
+        }
+        .sheet(isPresented: $showAddTask) {
+            TaskFormView(taskId: nil)
         }
         .onReceive(timer) { tick = $0 }
         .onChange(of: midnightObserver.currentDateKey) { _, _ in tick = Date() }
@@ -167,7 +169,9 @@ struct TodayScreen: View {
             ForEach(tasks, id: \.id) { task in
                 let state = taskStateFor(task: task, date: startOfDay(now), entries: allEntries, now: now)
                 let history = taskHistoryFor(task: task, entries: allEntries, now: now)
-                NavigationLink(value: task.id) {
+                Button {
+                    logCoordinator.open(task.id)
+                } label: {
                     TaskRow(task: task, state: state, sparkline: history)
                 }
                 .buttonStyle(.plain)
@@ -178,7 +182,7 @@ struct TodayScreen: View {
     // MARK: - Empty state
 
     private func emptyState(c: TallyColors) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 16) {
             Text("No tasks scheduled today")
                 .font(TallyFont.heading(18, weight: .medium))
                 .foregroundStyle(c.text)
@@ -186,6 +190,20 @@ struct TodayScreen: View {
                 .font(TallyFont.body(13))
                 .foregroundStyle(c.dim)
                 .multilineTextAlignment(.center)
+            Button {
+                showAddTask = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus")
+                    Text("New task")
+                }
+                .font(TallyFont.heading(14, weight: .medium))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background(c.accent)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 60)

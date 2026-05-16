@@ -3,12 +3,14 @@
 //  Tally
 //
 //  Grid of quick-log buttons for count/timer tasks.
+//  Optional selectedValue highlights the staged chip.
 
 import SwiftUI
 
 struct PresetChipGrid: View {
     let values: [Double]
     let unit: String?
+    var selectedValue: Double? = nil
     let onTap: (Double) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -19,15 +21,16 @@ struct PresetChipGrid: View {
 
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(values, id: \.self) { value in
+                let isSelected = selectedValue == value
                 Button {
                     onTap(value)
                 } label: {
-                    Text("+\(Int(value))")
+                    Text(verbatim: "+\(Int(value))")
                         .font(TallyFont.heading(14, weight: .medium))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(c.accentSoft)
-                        .foregroundStyle(c.accent)
+                        .background(isSelected ? c.accent : c.accentSoft)
+                        .foregroundStyle(isSelected ? .white : c.accent)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
@@ -37,7 +40,7 @@ struct PresetChipGrid: View {
 }
 
 #Preview {
-    PresetChipGrid(values: [5, 10, 25, 50], unit: "reps") { value in
+    PresetChipGrid(values: [5, 10, 25, 50], unit: "reps", selectedValue: 25) { value in
         print("Tapped +\(Int(value))")
     }
     .padding()
