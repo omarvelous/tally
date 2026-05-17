@@ -1,7 +1,7 @@
 # Tally — Project Conventions
 
 ## Stack
-- **Swift 6.3.2**, iOS 26.5 deployment target
+- **Swift 6.3.2**, iOS 18.0 deployment target
 - **SwiftUI** for all views, **SwiftData** for persistence
 - `@Observable` for view models (never `ObservableObject`)
 - Xcode 26.5 — project file is committed (no XcodeGen)
