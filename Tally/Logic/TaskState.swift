@@ -28,20 +28,23 @@ func taskStateFor(task: TallyTask, date: Date, entries: [LogEntry], now: Date) -
     let key = localDateKey(date)
     let dow = dayOfWeek(date)
     let scheduled = task.isScheduled(on: dow)
-    if !scheduled {
+
+    let taskEntries = entries.filter { $0.taskId == task.id && $0.date == key && !$0.deleted }
+
+    // Not scheduled and no entries — truly off
+    if !scheduled && taskEntries.isEmpty {
         return TaskStatus(status: .off, pct: 0, sum: nil, label: "Not scheduled", count: 0, value: nil)
     }
 
-    let taskEntries = entries.filter { $0.taskId == task.id && $0.date == key && !$0.deleted }
     let isPastDate = startOfDay(date) < startOfDay(now)
     let isFutureDate = startOfDay(date) > startOfDay(now)
 
-    // Determine if the task's due time has passed
+    // Determine if the task's due time has passed (only relevant if scheduled)
     let firstTime = task.times.first ?? "all-day"
     let nowMins = minutesSinceMidnight(now)
     let dueTime = firstTime == "all-day" ? (23 * 60 + 59) : parseHHMM(firstTime).mins
     let isToday = key == localDateKey(now)
-    let passedTime = isToday ? nowMins > dueTime : isPastDate
+    let passedTime = scheduled ? (isToday ? nowMins > dueTime : isPastDate) : false
 
     switch task.type {
     case .check, .yesno:
@@ -64,7 +67,7 @@ func taskStateFor(task: TallyTask, date: Date, entries: [LogEntry], now: Date) -
     case .count:
         let sum = taskEntries.reduce(0.0) { $0 + $1.value }
         let target = task.target ?? 1
-        let pct = min(sum / target, 1.0)
+        let pct = sum / target  // uncapped — allows >1.0 for over-target
         let done = sum >= target
         let status: TaskStatusKind
         if done {
@@ -83,7 +86,7 @@ func taskStateFor(task: TallyTask, date: Date, entries: [LogEntry], now: Date) -
     case .timer:
         let sum = taskEntries.reduce(0.0) { $0 + $1.value }
         let target = task.target ?? 1
-        let pct = min(sum / target, 1.0)
+        let pct = sum / target  // uncapped — allows >1.0 for over-target
         let done = sum >= target
         let status: TaskStatusKind
         if done {

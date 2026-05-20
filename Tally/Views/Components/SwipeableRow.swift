@@ -18,26 +18,32 @@ struct SwipeableRow<Content: View>: View {
     @State private var offset: CGFloat = 0
     @State private var isSwiping = false
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
+        let c = TallyColors.resolve(colorScheme)
+
         ZStack(alignment: .trailing) {
             // Pill revealed behind content
-            if offset < -10 {
-                HStack {
-                    Spacer()
-                    Text(verbatim: pillLabel)
-                        .font(TallyFont.mono(11, weight: .bold))
-                        .tracking(0.8)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(pillColor)
-                        .clipShape(Capsule())
-                }
-                .padding(.trailing, 8)
+            HStack {
+                Spacer()
+                Text(verbatim: pillLabel)
+                    .font(TallyFont.mono(11, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(pillColor)
+                    .clipShape(Capsule())
             }
+            .padding(.trailing, 8)
+            .opacity(offset < -20 ? 1 : 0)
 
-            // Row content slides left
+            // Row content slides left (opaque background so pill is hidden underneath)
             content()
+                .background(
+                    c.bg.padding(.trailing, -20) // extend bg past clip edge
+                )
                 .offset(x: min(offset, 0))
                 .gesture(
                     disabled ? nil : DragGesture(minimumDistance: 15)

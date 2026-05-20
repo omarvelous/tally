@@ -186,7 +186,7 @@ struct TaskStatsView: View {
         if off { return 6 }
         switch task.type {
         case .count, .timer:
-            return CGFloat(state.pct) * 130
+            return min(CGFloat(state.pct), 1.0) * 130
         case .numeric:
             if let v = state.value, best > 0 {
                 return CGFloat(v / best) * 100 + 14
