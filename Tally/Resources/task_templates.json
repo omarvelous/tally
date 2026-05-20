@@ -1,0 +1,260 @@
+{
+  "categories": [
+    { "id": "health", "name": "Health & Fitness" },
+    { "id": "productivity", "name": "Productivity" },
+    { "id": "selfcare", "name": "Self-care & Wellness" }
+  ],
+  "units": [
+    "reps", "oz", "ml", "cups", "min", "hrs",
+    "kg", "lbs", "mi", "km", "steps", "cal",
+    "pages", "sets", "$"
+  ],
+  "defaultUnits": {
+    "count": "reps",
+    "timer": "min",
+    "numeric": "kg"
+  },
+  "popular": ["water", "vitamins", "read", "walk", "meditate", "journal"],
+  "templates": [
+    {
+      "id": "water",
+      "name": "Drink water",
+      "description": "Stay hydrated throughout the day",
+      "category": "health",
+      "type": "count",
+      "target": 64,
+      "unit": "oz",
+      "allowedUnits": ["oz", "ml", "cups"],
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "pushups",
+      "name": "Push-ups",
+      "description": "Build upper body strength",
+      "category": "health",
+      "type": "count",
+      "target": 50,
+      "unit": "reps",
+      "allowedUnits": ["reps", "sets"],
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "walk",
+      "name": "Walk",
+      "description": "Get moving every day",
+      "category": "health",
+      "type": "timer",
+      "target": 30,
+      "unit": "min",
+      "allowedUnits": ["min", "hrs"],
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "stretch",
+      "name": "Stretch",
+      "description": "Start your day limber",
+      "category": "health",
+      "type": "yesno",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["08:00"]
+    },
+    {
+      "id": "weighin",
+      "name": "Weigh-in",
+      "description": "Track your weight daily",
+      "category": "health",
+      "type": "numeric",
+      "target": null,
+      "unit": "lbs",
+      "allowedUnits": ["lbs", "kg"],
+      "days": "daily",
+      "times": ["07:30"]
+    },
+    {
+      "id": "vitamins",
+      "name": "Take vitamins",
+      "description": "Don't forget your supplements",
+      "category": "health",
+      "type": "check",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["08:00"]
+    },
+    {
+      "id": "meditate",
+      "name": "Meditate",
+      "description": "Calm your mind",
+      "category": "health",
+      "type": "timer",
+      "target": 10,
+      "unit": "min",
+      "allowedUnits": ["min", "hrs"],
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "workout",
+      "name": "Workout",
+      "description": "Hit the gym",
+      "category": "health",
+      "type": "check",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "mwf",
+      "times": ["all-day"]
+    },
+    {
+      "id": "sleep",
+      "name": "Sleep 8 hours",
+      "description": "Prioritize rest",
+      "category": "health",
+      "type": "yesno",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["22:00"]
+    },
+    {
+      "id": "read",
+      "name": "Read",
+      "description": "Build a reading habit",
+      "category": "productivity",
+      "type": "timer",
+      "target": 20,
+      "unit": "min",
+      "allowedUnits": ["min", "hrs", "pages"],
+      "days": "daily",
+      "times": ["21:00"]
+    },
+    {
+      "id": "journal",
+      "name": "Journal",
+      "description": "Reflect on your day",
+      "category": "productivity",
+      "type": "check",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "deepwork",
+      "name": "Deep work",
+      "description": "Focused, distraction-free work",
+      "category": "productivity",
+      "type": "timer",
+      "target": 120,
+      "unit": "min",
+      "allowedUnits": ["min", "hrs"],
+      "days": "weekdays",
+      "times": ["all-day"]
+    },
+    {
+      "id": "nosocial",
+      "name": "No social media",
+      "description": "Reclaim your attention",
+      "category": "productivity",
+      "type": "yesno",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "study",
+      "name": "Study",
+      "description": "Dedicated learning time",
+      "category": "productivity",
+      "type": "timer",
+      "target": 60,
+      "unit": "min",
+      "allowedUnits": ["min", "hrs"],
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "language",
+      "name": "Practice language",
+      "description": "Consistency beats intensity",
+      "category": "productivity",
+      "type": "timer",
+      "target": 15,
+      "unit": "min",
+      "allowedUnits": ["min", "hrs"],
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "skincare",
+      "name": "Skincare routine",
+      "description": "Morning and night",
+      "category": "selfcare",
+      "type": "check",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "floss",
+      "name": "Floss",
+      "description": "Protect your teeth",
+      "category": "selfcare",
+      "type": "check",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["22:00"]
+    },
+    {
+      "id": "gratitude",
+      "name": "Gratitude",
+      "description": "Note what you're thankful for",
+      "category": "selfcare",
+      "type": "check",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["all-day"]
+    },
+    {
+      "id": "coldshower",
+      "name": "Cold shower",
+      "description": "Build mental toughness",
+      "category": "selfcare",
+      "type": "yesno",
+      "target": null,
+      "unit": null,
+      "allowedUnits": null,
+      "days": "daily",
+      "times": ["07:00"]
+    },
+    {
+      "id": "screenfree",
+      "name": "Screen-free time",
+      "description": "Wind down before bed",
+      "category": "selfcare",
+      "type": "timer",
+      "target": 30,
+      "unit": "min",
+      "allowedUnits": ["min", "hrs"],
+      "days": "daily",
+      "times": ["20:00"]
+    }
+  ]
+}

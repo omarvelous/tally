@@ -15,7 +15,12 @@ struct TasksScreen: View {
 
     @State private var sortBy: SortOption = .rate
     @State private var viewFilter: ViewFilter = .active
-    @State private var showAddTask = false
+    @State private var showTemplatePicker = false
+    @State private var showCustomForm = false
+    @State private var templateToCustomize: TaskTemplate?
+    @State private var quickAddedTaskName: String?
+    @State private var quickAddedTaskId: String?
+    @State private var selectedTaskId: String?
 
     enum SortOption: String { case rate, name }
     enum ViewFilter: String { case active, archived }
@@ -58,7 +63,7 @@ struct TasksScreen: View {
                         }
                         Spacer()
                         Button {
-                            showAddTask = true
+                            showTemplatePicker = true
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "plus")
@@ -101,18 +106,16 @@ struct TasksScreen: View {
                                 SwipeableRow(pillLabel: "LOG →", pillColor: c.pos) {
                                     logCoordinator.open(task.id)
                                 } content: {
-                                    NavigationLink(value: task.id) {
-                                        taskRow(task: task, hist: hist, rate: rate, isArchived: false, c: c)
-                                    }
-                                    .buttonStyle(.plain)
+                                    taskRow(task: task, hist: hist, rate: rate, isArchived: false, c: c)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { selectedTaskId = task.id }
                                 }
                             } else {
                                 // Archived: tap only, no swipe
-                                NavigationLink(value: task.id) {
-                                    taskRow(task: task, hist: hist, rate: rate, isArchived: true, c: c)
-                                }
-                                .buttonStyle(.plain)
-                                .opacity(0.6)
+                                taskRow(task: task, hist: hist, rate: rate, isArchived: true, c: c)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { selectedTaskId = task.id }
+                                    .opacity(0.6)
                             }
                         }
 
@@ -129,12 +132,46 @@ struct TasksScreen: View {
                 .padding(.bottom, 20)
             }
             .background(c.bg)
-            .navigationDestination(for: String.self) { taskId in
+            .navigationDestination(item: $selectedTaskId) { taskId in
                 TaskStatsView(taskId: taskId)
             }
         }
-        .sheet(isPresented: $showAddTask) {
+        .sheet(isPresented: $showTemplatePicker) {
+            TaskTemplatePicker { result in
+                switch result {
+                case .custom:
+                    showCustomForm = true
+                case .quickAdded(let task):
+                    quickAddedTaskName = task.name
+                    quickAddedTaskId = task.id
+                case .customize(let template):
+                    templateToCustomize = template
+                }
+            }
+        }
+        .sheet(isPresented: $showCustomForm) {
             TaskFormView(taskId: nil)
+        }
+        .sheet(item: $templateToCustomize) { template in
+            TaskFormView(taskId: nil, template: template)
+        }
+        .overlay(alignment: .bottom) {
+            if let name = quickAddedTaskName {
+                QuickAddToast(
+                    taskName: name,
+                    onEdit: {
+                        if let id = quickAddedTaskId {
+                            quickAddedTaskName = nil
+                            quickAddedTaskId = nil
+                            selectedTaskId = id
+                        }
+                    },
+                    onDismiss: {
+                        quickAddedTaskName = nil
+                        quickAddedTaskId = nil
+                    }
+                )
+            }
         }
     }
 
@@ -176,6 +213,7 @@ struct TasksScreen: View {
 
     private func taskRow(task: TallyTask, hist: [Double], rate: Int, isArchived: Bool, c: TallyColors) -> some View {
         let sched = describeSchedule(task)
+        let daysCompact = compactDays(task)
         let rateColor = isArchived ? c.dim : (rate >= 90 ? c.pos : rate >= 70 ? c.text : c.neg)
         let dotColor = isArchived ? c.dim3 : (rate >= 90 ? c.pos : rate >= 70 ? c.accent : c.neg)
 
@@ -188,7 +226,7 @@ struct TasksScreen: View {
                 Text(task.name)
                     .font(TallyFont.heading(14, weight: .medium))
                     .foregroundStyle(isArchived ? c.dim : c.text)
-                Text(verbatim: "\(sched.days.uppercased()) · \(sched.times.uppercased()) · \(task.type.rawValue.uppercased())\(task.target != nil ? " · \(Int(task.target!)) \(task.unit ?? "")" : "")")
+                Text(verbatim: "\(daysCompact) · \(sched.times.uppercased()) · \(task.type.rawValue.uppercased())\(task.target != nil ? " · \(Int(task.target!)) \(task.unit ?? "")" : "")")
                     .font(TallyFont.mono(10))
                     .foregroundStyle(c.dim)
                     .lineLimit(1)
@@ -207,6 +245,18 @@ struct TasksScreen: View {
         .padding(.vertical, 12)
         .overlay(alignment: .bottom) {
             Rectangle().fill(c.rule).frame(height: 1)
+        }
+    }
+
+    private func compactDays(_ task: TallyTask) -> String {
+        if task.days.isEmpty || task.days.count == 7 {
+            return "DAILY"
+        } else if task.days.count == 5 && task.days.sorted() == [0, 1, 2, 3, 4] {
+            return "WKDAYS"
+        } else if task.days.count == 2 && task.days.contains(5) && task.days.contains(6) {
+            return "WKENDS"
+        } else {
+            return task.days.sorted().map { dayLabels[$0] }.joined(separator: "/")
         }
     }
 }

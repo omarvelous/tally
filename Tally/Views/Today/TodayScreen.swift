@@ -2,7 +2,7 @@
 //  TodayScreen.swift
 //  Tally
 //
-//  The daily dashboard. Ported from tally-today.jsx TodayScreen.
+//  The daily dashboard. Flat task list ordered by time, completed pushed to bottom.
 
 import SwiftUI
 import SwiftData
@@ -17,17 +17,34 @@ struct TodayScreen: View {
     @Query private var allEntries: [LogEntry]
 
     @State private var tick = Date()
-    @State private var showAddTask = false
+    @State private var showTemplatePicker = false
+    @State private var showCustomForm = false
+    @State private var templateToCustomize: TaskTemplate?
+    @State private var quickAddedTaskName: String?
+    @State private var quickAddedTaskId: String?
     private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
         let c = TallyColors.resolve(colorScheme)
         let now = tick
         let today = startOfDay(now)
-        let blocks = groupByTimeBlock(tasks: tasks, date: today)
+        let dow = dayOfWeek(today)
         let day = dayCompletionFor(date: today, tasks: tasks, entries: allEntries, now: now)
         let streak = streakFor(tasks: tasks, entries: allEntries, now: now)
-        let scheduled = blocks.activeBlocks.flatMap { $0.1 }
+
+        let scheduled = tasks.filter { $0.isScheduled(on: dow) }
+        let unscheduled = tasks.filter { !$0.isScheduled(on: dow) }
+        let withState = scheduled.map { task -> (TallyTask, TaskStatus) in
+            (task, taskStateFor(task: task, date: today, entries: allEntries, now: now))
+        }
+
+        // Sort: uncompleted first (by time), then completed (by time)
+        let pending = withState
+            .filter { $0.1.status != .done }
+            .sorted { taskSortTime($0.0) < taskSortTime($1.0) }
+        let done = withState
+            .filter { $0.1.status == .done }
+            .sorted { taskSortTime($0.0) < taskSortTime($1.0) }
 
         NavigationStack {
             ScrollView {
@@ -35,15 +52,33 @@ struct TodayScreen: View {
                     // Header
                     header(now: now, streak: streak, c: c)
 
-                    if scheduled.isEmpty {
+                    if tasks.isEmpty {
+                        // Zero active tasks: show batch onboarding
+                        OnboardingTemplateView(
+                            onBrowseAll: { showTemplatePicker = true },
+                            onCreateCustom: { showCustomForm = true }
+                        )
+                    } else if scheduled.isEmpty && unscheduled.isEmpty {
                         emptyState(c: c)
                     } else {
                         // Day completion card
-                        dayCompletionCard(day: day, scheduled: scheduled, now: now, c: c)
+                        if !scheduled.isEmpty {
+                            dayCompletionCard(day: day, scheduled: scheduled, now: now, c: c)
+                        }
 
-                        // Time block sections
-                        ForEach(blocks.activeBlocks, id: \.0) { block, blockTasks in
-                            timeBlockSection(block: block, tasks: blockTasks, now: now, c: c)
+                        // Pending tasks
+                        if !pending.isEmpty {
+                            taskSection(label: "\(pending.count) REMAINING", tasks: pending, now: now, c: c)
+                        }
+
+                        // Completed tasks
+                        if !done.isEmpty {
+                            taskSection(label: "\(done.count) DONE", tasks: done, now: now, c: c, dimmed: true)
+                        }
+
+                        // Bonus: not scheduled today but available to log
+                        if !unscheduled.isEmpty {
+                            bonusSection(tasks: unscheduled, now: now, c: c)
                         }
                     }
                 }
@@ -52,8 +87,39 @@ struct TodayScreen: View {
             }
             .background(c.bg)
         }
-        .sheet(isPresented: $showAddTask) {
+        .sheet(isPresented: $showTemplatePicker) {
+            TaskTemplatePicker { result in
+                switch result {
+                case .custom:
+                    showCustomForm = true
+                case .quickAdded(let task):
+                    quickAddedTaskName = task.name
+                    quickAddedTaskId = task.id
+                case .customize(let template):
+                    templateToCustomize = template
+                }
+            }
+        }
+        .sheet(isPresented: $showCustomForm) {
             TaskFormView(taskId: nil)
+        }
+        .sheet(item: $templateToCustomize) { template in
+            TaskFormView(taskId: nil, template: template)
+        }
+        .overlay(alignment: .bottom) {
+            if let name = quickAddedTaskName {
+                QuickAddToast(
+                    taskName: name,
+                    onEdit: {
+                        quickAddedTaskName = nil
+                        quickAddedTaskId = nil
+                    },
+                    onDismiss: {
+                        quickAddedTaskName = nil
+                        quickAddedTaskId = nil
+                    }
+                )
+            }
         }
         .onReceive(timer) { tick = $0 }
         .onChange(of: midnightObserver.currentDateKey) { _, _ in tick = Date() }
@@ -148,33 +214,90 @@ struct TodayScreen: View {
         }
     }
 
-    // MARK: - Time block section
+    // MARK: - Task section
 
-    private func timeBlockSection(block: TimeBlock, tasks: [TallyTask], now: Date, c: TallyColors) -> some View {
-        let doneCount = tasks.filter { taskStateFor(task: $0, date: startOfDay(now), entries: allEntries, now: now).status == .done }.count
+    private func taskSection(label: String, tasks: [(TallyTask, TaskStatus)], now: Date, c: TallyColors, dimmed: Bool = false, bonus: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(TallyFont.label())
+                .textCase(.uppercase)
+                .tracking(1.2)
+                .foregroundStyle(c.dim)
 
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(block.timeRange.isEmpty ? block.label : "\(block.label) · \(block.timeRange)")
-                    .font(TallyFont.label())
-                    .textCase(.uppercase)
-                    .tracking(1.2)
-                    .foregroundStyle(c.dim)
-                Spacer()
-                Text("\(doneCount)/\(tasks.count)")
-                    .font(TallyFont.mono(10))
-                    .foregroundStyle(c.dim)
-            }
-
-            ForEach(tasks, id: \.id) { task in
-                let state = taskStateFor(task: task, date: startOfDay(now), entries: allEntries, now: now)
+            ForEach(tasks, id: \.0.id) { task, state in
                 let history = taskHistoryFor(task: task, entries: allEntries, now: now)
+                let timeLabel = taskTimeLabel(task)
+                let overTarget = state.pct > 1.0
+                let isBinary = task.type == .check || task.type == .yesno
+                let shouldDim = dimmed && isBinary
                 Button {
                     logCoordinator.open(task.id)
                 } label: {
-                    TaskRow(task: task, state: state, sparkline: history)
+                    HStack(spacing: 10) {
+                        if overTarget {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(c.warn)
+                        } else {
+                            StatusPip(status: state.status)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(task.name)
+                                .font(TallyFont.heading(14, weight: .medium))
+                                .foregroundStyle(c.text)
+                            HStack(spacing: 0) {
+                                Text(state.label)
+                                    .font(TallyFont.mono(11))
+                                    .foregroundStyle(c.dim)
+                                if let time = timeLabel {
+                                    Text(" · ")
+                                        .font(TallyFont.mono(11))
+                                        .foregroundStyle(c.dim)
+                                    Text(time)
+                                        .font(TallyFont.mono(11, weight: .medium))
+                                        .foregroundStyle(c.accent)
+                                }
+                            }
+                        }
+
+                        Spacer()
+
+                        SparklineView(values: history)
+
+                        Text("\(Int(state.pct * 100))%")
+                            .font(TallyFont.mono(12, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(overTarget ? c.warn : c.dim)
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 4)
+                    .contentShape(Rectangle())
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(c.rule).frame(height: 1)
+                    }
                 }
                 .buttonStyle(.plain)
+                .opacity(shouldDim ? 0.5 : 1)
+            }
+        }
+    }
+
+    // MARK: - Bonus section (not scheduled but logged today)
+
+    private func bonusSection(tasks: [TallyTask], now: Date, c: TallyColors) -> some View {
+        let todayKey = localDateKey(now)
+        let loggedToday = tasks.filter { task in
+            allEntries.contains { $0.taskId == task.id && $0.date == todayKey && !$0.deleted }
+        }
+
+        return Group {
+            if !loggedToday.isEmpty {
+                let withState = loggedToday.map { task -> (TallyTask, TaskStatus) in
+                    (task, taskStateFor(task: task, date: startOfDay(now), entries: allEntries, now: now))
+                }
+                taskSection(label: "BONUS · \(loggedToday.count) LOGGED", tasks: withState, now: now, c: c, bonus: true)
             }
         }
     }
@@ -191,7 +314,7 @@ struct TodayScreen: View {
                 .foregroundStyle(c.dim)
                 .multilineTextAlignment(.center)
             Button {
-                showAddTask = true
+                showTemplatePicker = true
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
@@ -220,4 +343,17 @@ struct TodayScreen: View {
         let m = cal.component(.minute, from: now)
         return "\(dayNames[dow]) · \(monthNamesShort[month]) \(day) · \(String(format: "%02d:%02d", h, m))"
     }
+
+    private func taskSortTime(_ task: TallyTask) -> Int {
+        let ft = task.times.first ?? "all-day"
+        if ft == "all-day" { return 9999 }
+        return parseHHMM(ft).mins
+    }
+
+    private func taskTimeLabel(_ task: TallyTask) -> String? {
+        let ft = task.times.first ?? "all-day"
+        if ft == "all-day" { return nil }
+        return ft
+    }
+
 }
