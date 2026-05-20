@@ -3,18 +3,35 @@
 //  Tally
 //
 //  Shared ModelContainer configuration used by the app, widgets, and intents.
-//  Ensures all targets use identical CloudKit + migration settings.
+//  Uses App Group container so the widget extension can read the same database.
 
+import Foundation
 import SwiftData
 
 enum ModelContainerFactory {
+    static let appGroupID = "group.omarvelous.Tally"
+
     static func create(inMemory: Bool = false) throws -> ModelContainer {
         let schema = Schema(versionedSchema: TallySchemaV1.self)
-        let config = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: inMemory,
-            cloudKitDatabase: inMemory ? .none : .automatic
-        )
+
+        let config: ModelConfiguration
+        if inMemory {
+            config = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: true,
+                cloudKitDatabase: .none
+            )
+        } else {
+            let storeURL = FileManager.default
+                .containerURL(forSecurityApplicationGroupIdentifier: appGroupID)!
+                .appending(path: "Tally.store")
+            config = ModelConfiguration(
+                schema: schema,
+                url: storeURL,
+                cloudKitDatabase: .automatic
+            )
+        }
+
         return try ModelContainer(
             for: schema,
             migrationPlan: TallyMigrationPlan.self,
