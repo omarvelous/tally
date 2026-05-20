@@ -385,6 +385,7 @@ struct LogSheet: View {
     private func logValue(_ value: Double, taskId: String, date: String, now: Date) {
         let entry = LogEntry(taskId: taskId, date: date, time: localTimeKey(now), value: value)
         modelContext.insert(entry)
+        try? modelContext.save()
         WidgetCenter.shared.reloadAllTimelines()
     }
 

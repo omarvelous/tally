@@ -320,6 +320,8 @@ struct TaskTemplatePicker: View {
     private func quickAdd(_ template: TaskTemplate) {
         let task = taskFromTemplate(template)
         modelContext.insert(task)
+        try? modelContext.save()
+        reloadWidgets()
         dismiss()
         onResult(.quickAdded(task))
     }

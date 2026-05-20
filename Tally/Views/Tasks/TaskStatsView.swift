@@ -335,6 +335,8 @@ struct TaskStatsView: View {
             manageRow(task.archived ? "Restore task" : "Archive task", icon: "archivebox", c: c) {
                 task.archived.toggle()
                 task.updatedAt = Date().timeIntervalSince1970 * 1000
+                try? modelContext.save()
+                reloadWidgets()
                 dismiss()
             }
             manageRow("Delete task", icon: "trash", c: c, danger: true) {

@@ -487,6 +487,8 @@ struct TaskFormView: View {
             )
             modelContext.insert(task)
         }
+        try? modelContext.save()
+        reloadWidgets()
         dismiss()
     }
 

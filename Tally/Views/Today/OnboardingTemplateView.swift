@@ -160,5 +160,7 @@ struct OnboardingTemplateView: View {
                 modelContext.insert(task)
             }
         }
+        try? modelContext.save()
+        reloadWidgets()
     }
 }

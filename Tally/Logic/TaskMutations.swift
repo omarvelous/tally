@@ -6,6 +6,7 @@
 
 import Foundation
 import SwiftData
+import WidgetKit
 
 /// Delete a task and all its log entries. Single cascade delete codepath.
 func deleteTaskAndEntries(taskId: String, context: ModelContext) {
@@ -19,4 +20,11 @@ func deleteTaskAndEntries(taskId: String, context: ModelContext) {
     if let task = try? context.fetch(taskDescriptor).first {
         context.delete(task)
     }
+    try? context.save()
+    WidgetCenter.shared.reloadAllTimelines()
+}
+
+/// Notify widgets that data changed. Call after any task or log mutation.
+func reloadWidgets() {
+    WidgetCenter.shared.reloadAllTimelines()
 }
