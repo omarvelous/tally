@@ -312,7 +312,7 @@ final class SyncEngine {
             .execute()
     }
 
-    /// Log a completion: insert log_entry, push to Supabase
+    /// Log a completion: update local HabitDay, push log_entry to Supabase
     @MainActor
     func logCompletion(
         habitDayId: String,
@@ -320,22 +320,39 @@ final class SyncEngine {
         timezone: String,
         context: ModelContext
     ) async throws {
-        let logId = UUID().uuidString
-        let now = Date().timeIntervalSince1970 * 1000
+        // 1. Update local HabitDay immediately (mirrors the Postgres trigger)
+        let hdId = habitDayId
+        let descriptor = FetchDescriptor<HabitDay>(predicate: #Predicate { $0.id == hdId })
+        guard let habitDay = (try? context.fetch(descriptor))?.first else { return }
 
-        // The V1 LogEntry model bridges via taskId field
-        let entry = LogEntry(
-            id: logId,
-            taskId: habitDayId,
-            date: "",
-            time: "",
-            value: value,
-            ts: now
-        )
-        context.insert(entry)
+        let newSum = habitDay.sum + value
+        habitDay.sum = newSum
+
+        let target = habitDay.targetSnap
+        let newPct: Double
+        if target == nil || target == 0 {
+            // check/yesno: any value >= 1 = done
+            newPct = newSum >= 1 ? 1.0 : 0.0
+        } else {
+            newPct = newSum / target!
+        }
+        habitDay.pct = newPct
+
+        if newPct >= 1.0 {
+            habitDay.status = "done"
+        } else if newPct > 0 {
+            habitDay.status = "partial"
+        } else {
+            habitDay.status = "pending"
+        }
+
+        // 2. Update local DaySummary
+        recomputeLocalDaySummary(date: habitDay.date, userHabitId: habitDay.userHabitId, context: context)
+
         try context.save()
 
-        // Push to Supabase
+        // 3. Push log_entry to Supabase (trigger will update server-side)
+        let logId = UUID().uuidString
         try await client
             .from("log_entries")
             .insert(PushLogEntry(
@@ -345,6 +362,60 @@ final class SyncEngine {
                 timezone: timezone
             ))
             .execute()
+    }
+
+    /// Recompute the local DaySummary for a given date after a HabitDay change.
+    @MainActor
+    private func recomputeLocalDaySummary(date: String, userHabitId: String, context: ModelContext) {
+        // Find the profile_id from the user_habit
+        let uhId = userHabitId
+        guard let uh = (try? context.fetch(
+            FetchDescriptor<UserHabit>(predicate: #Predicate { $0.id == uhId })
+        ))?.first else { return }
+
+        let profileId = uh.profileId
+        let dateKey = date
+
+        // Aggregate all habit_days for this profile + date
+        let allHDs = (try? context.fetch(FetchDescriptor<HabitDay>())) ?? []
+        let allUHs = (try? context.fetch(
+            FetchDescriptor<UserHabit>(predicate: #Predicate { $0.profileId == profileId })
+        )) ?? []
+        let uhIds = Set(allUHs.map(\.id))
+
+        let todayHDs = allHDs.filter { $0.date == dateKey && uhIds.contains($0.userHabitId) }
+        let total = todayHDs.count
+        let done = todayHDs.filter { $0.status == "done" }.count
+        let partial = todayHDs.filter { $0.status == "partial" }.count
+        let pending = todayHDs.filter { $0.status == "pending" }.count
+        let pct = total > 0 ? Double(done) / Double(total) : 0
+        let streakDay = total > 0 && done == total
+
+        // Upsert DaySummary
+        let pid = profileId
+        let existingDesc = FetchDescriptor<DaySummary>(
+            predicate: #Predicate { $0.profileId == pid && $0.date == dateKey }
+        )
+        if let existing = (try? context.fetch(existingDesc))?.first {
+            existing.total = total
+            existing.done = done
+            existing.partial = partial
+            existing.overdue = pending
+            existing.pct = pct
+            existing.streakDay = streakDay
+            existing.updatedAt = Date().timeIntervalSince1970 * 1000
+        } else {
+            context.insert(DaySummary(
+                profileId: profileId,
+                date: dateKey,
+                total: total,
+                done: done,
+                partial: partial,
+                overdue: pending,
+                pct: pct,
+                streakDay: streakDay
+            ))
+        }
     }
 
     /// Update a user_habit's schedule (target/days/times change)
