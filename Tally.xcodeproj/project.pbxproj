@@ -10,6 +10,12 @@
 		C501A3AF2FB8A55D004854C0 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C501A3AE2FB8A55D004854C0 /* WidgetKit.framework */; };
 		C501A3B12FB8A55D004854C0 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C501A3B02FB8A55D004854C0 /* SwiftUI.framework */; };
 		C501A3BE2FB8A55F004854C0 /* TallyWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C501A3AC2FB8A55D004854C0 /* TallyWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C597A43E2FC1E7DC00C89E9C /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = C597A43D2FC1E7DC00C89E9C /* Auth */; };
+		C597A4402FC1E7DC00C89E9C /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = C597A43F2FC1E7DC00C89E9C /* Functions */; };
+		C597A4422FC1E7DC00C89E9C /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = C597A4412FC1E7DC00C89E9C /* PostgREST */; };
+		C597A4442FC1E7DC00C89E9C /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = C597A4432FC1E7DC00C89E9C /* Realtime */; };
+		C597A4462FC1E7DC00C89E9C /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = C597A4452FC1E7DC00C89E9C /* Storage */; };
+		C597A4482FC1E7DC00C89E9C /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = C597A4472FC1E7DC00C89E9C /* Supabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,11 +80,19 @@
 				Logic/DayCompletion.swift,
 				Logic/Streak.swift,
 				Logic/TaskState.swift,
+				Models/Category.swift,
+				Models/DaySummary.swift,
+				Models/Habit.swift,
+				Models/HabitDay.swift,
 				Models/LogEntry.swift,
+				Models/Profile.swift,
 				Models/TallySchema.swift,
 				Models/TallySettings.swift,
 				Models/TallyTask.swift,
 				Models/TaskType.swift,
+				Models/UserHabit.swift,
+				Models/UserHabitSchedule.swift,
+				Models/UserPreferences.swift,
 				Services/ModelContainerFactory.swift,
 			);
 			target = C501A3AB2FB8A55D004854C0 /* TallyWidgetsExtension */;
@@ -119,6 +133,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C597A4422FC1E7DC00C89E9C /* PostgREST in Frameworks */,
+				C597A4402FC1E7DC00C89E9C /* Functions in Frameworks */,
+				C597A4482FC1E7DC00C89E9C /* Supabase in Frameworks */,
+				C597A43E2FC1E7DC00C89E9C /* Auth in Frameworks */,
+				C597A4462FC1E7DC00C89E9C /* Storage in Frameworks */,
+				C597A4442FC1E7DC00C89E9C /* Realtime in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -202,6 +222,12 @@
 			);
 			name = Tally;
 			packageProductDependencies = (
+				C597A43D2FC1E7DC00C89E9C /* Auth */,
+				C597A43F2FC1E7DC00C89E9C /* Functions */,
+				C597A4412FC1E7DC00C89E9C /* PostgREST */,
+				C597A4432FC1E7DC00C89E9C /* Realtime */,
+				C597A4452FC1E7DC00C89E9C /* Storage */,
+				C597A4472FC1E7DC00C89E9C /* Supabase */,
 			);
 			productName = Tally;
 			productReference = C501A2FF2FB7F882004854C0 /* Tally.app */;
@@ -310,6 +336,9 @@
 			);
 			mainGroup = C501A2F62FB7F882004854C0;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C597A43C2FC1E7DC00C89E9C /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C501A3002FB7F882004854C0 /* Products */;
 			projectDirPath = "";
@@ -780,6 +809,50 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C597A43C2FC1E7DC00C89E9C /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C597A43D2FC1E7DC00C89E9C /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C597A43C2FC1E7DC00C89E9C /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		C597A43F2FC1E7DC00C89E9C /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C597A43C2FC1E7DC00C89E9C /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		C597A4412FC1E7DC00C89E9C /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C597A43C2FC1E7DC00C89E9C /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		C597A4432FC1E7DC00C89E9C /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C597A43C2FC1E7DC00C89E9C /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		C597A4452FC1E7DC00C89E9C /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C597A43C2FC1E7DC00C89E9C /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		C597A4472FC1E7DC00C89E9C /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C597A43C2FC1E7DC00C89E9C /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C501A2F72FB7F882004854C0 /* Project object */;
 }

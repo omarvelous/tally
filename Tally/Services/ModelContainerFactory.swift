@@ -12,7 +12,7 @@ enum ModelContainerFactory {
     static let appGroupID = "group.omarvelous.Tally"
 
     static func create(inMemory: Bool = false) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: TallySchemaV1.self)
+        let schema = Schema(versionedSchema: TallySchemaV2.self)
 
         let config: ModelConfiguration
         if inMemory {

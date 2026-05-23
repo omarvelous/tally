@@ -4,20 +4,22 @@
 //
 //  Settings: profile, appearance, notifications, task management, data.
 
+import Auth
 import SwiftUI
 import SwiftData
 
 struct MoreScreen: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthService.self) private var auth
     @Query(filter: #Predicate<TallyTask> { !$0.archived }) private var activeTasks: [TallyTask]
     @Query private var settings: [TallySettings]
 
     @State private var showOnboarding = false
     @State private var showProfile = false
     @State private var showReminders = false
-    @State private var showAuthFlow = false
     @State private var showResetConfirm = false
+    @State private var showSignOutConfirm = false
 
     private var currentSettings: TallySettings {
         settings.first ?? TallySettings()
@@ -99,10 +101,17 @@ struct MoreScreen: View {
                         }
                     }
 
-                    // Preview · Auth flows
-                    settingsSection("PREVIEW · AUTH FLOWS", c: c) {
-                        navRow("Sign in / Create account", sub: "Preview auth screens", c: c) {
-                            showAuthFlow = true
+                    // Account
+                    settingsSection("ACCOUNT", c: c) {
+                        if let email = auth.session?.user.email {
+                            settingRow("Signed in as", c: c) {
+                                Text(email)
+                                    .font(TallyFont.mono(11))
+                                    .foregroundStyle(c.dim)
+                            }
+                        }
+                        navRow("Sign out", sub: "You can sign back in anytime", c: c, danger: true) {
+                            showSignOutConfirm = true
                         }
                         navRow("View onboarding", sub: "Replay the welcome screen", c: c) {
                             showOnboarding = true
@@ -137,13 +146,17 @@ struct MoreScreen: View {
         .sheet(isPresented: $showReminders) {
             RemindersView()
         }
-        .sheet(isPresented: $showAuthFlow) {
-            AuthFlowView()
-        }
         .confirmationDialog("Reset all data?", isPresented: $showResetConfirm, titleVisibility: .visible) {
             Button("Reset everything", role: .destructive) { resetData() }
         } message: {
             Text("This will delete all tasks and log entries.")
+        }
+        .confirmationDialog("Sign out?", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
+            Button("Sign out", role: .destructive) {
+                Task { try? await auth.signOut() }
+            }
+        } message: {
+            Text("Your data is synced. You can sign back in anytime.")
         }
     }
 
