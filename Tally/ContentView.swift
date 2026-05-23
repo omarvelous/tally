@@ -53,6 +53,8 @@ private struct LivePreview: View {
     @State private var sync = SyncEngine()
     @State private var ready = false
 
+    private static let container: ModelContainer = try! ModelContainerFactory.create()
+
     var body: some View {
         Group {
             if ready {
@@ -66,18 +68,14 @@ private struct LivePreview: View {
                     .task { await load() }
             }
         }
-        .modelContainer(previewContainer)
-    }
-
-    private var previewContainer: ModelContainer {
-        try! ModelContainerFactory.create()
+        .modelContainer(Self.container)
     }
 
     @MainActor
     private func load() async {
         await auth.initialize()
         if let userId = auth.userId {
-            let context = previewContainer.mainContext
+            let context = Self.container.mainContext
             await sync.pullCatalog(context: context)
             await sync.pullUserData(context: context, profileId: userId)
             HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)

@@ -78,8 +78,8 @@ struct HabitDetailView: View {
             .background(c.bg)
             .navigationTitle(resolved.habitName)
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: String.self) { habitDayId in
-                HabitDayLogView(habitDayId: habitDayId)
+            .navigationDestination(for: HabitDayNavID.self) { nav in
+                HabitDayLogView(habitDayId: nav.id)
             }
         } else {
             Text("Habit not found")
@@ -102,7 +102,7 @@ struct HabitDetailView: View {
                 .padding(.bottom, 4)
 
             ForEach(recent, id: \.id) { hd in
-                NavigationLink(value: hd.id) {
+                NavigationLink(value: HabitDayNavID(id: hd.id)) {
                     HStack(spacing: 10) {
                         StatusPip(status: statusKindFor(hd.status))
 
@@ -332,6 +332,12 @@ struct HabitDetailView: View {
         }
         try? modelContext.save()
     }
+}
+
+// MARK: - Navigation wrapper (avoids String collision with TasksScreen)
+
+struct HabitDayNavID: Hashable {
+    let id: String
 }
 
 // MARK: - Resolved UserHabit (for detail view)
