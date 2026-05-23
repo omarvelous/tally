@@ -32,7 +32,7 @@ struct ContentView: View {
             }
         }
         .environment(logCoordinator)
-        .sheet(item: $logCoordinator.logTaskId) { habitDayId in
+        .sheet(item: $logCoordinator.logTaskId) { (habitDayId: String) in
             LogSheet(habitDayId: habitDayId)
                 .presentationDetents([.fraction(0.95)])
                 .presentationDragIndicator(.visible)
