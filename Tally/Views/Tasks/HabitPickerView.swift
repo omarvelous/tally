@@ -159,17 +159,19 @@ struct HabitPickerView: View {
         guard let profileId = auth.userId else { return }
         adoptingId = habit.id
         Task {
-            try? await syncEngine.adoptHabit(
-                habit: habit,
-                profileId: profileId,
-                target: habit.defaultTarget,
-                days: habit.defaultDays,
-                times: habit.defaultTimes,
-                today: localDateKey(Date()),
-                context: modelContext
-            )
-            // Generate today's habit_day for the newly adopted habit
-            HabitDayGenerator.generateForDate(Date(), profileId: profileId, context: modelContext)
+            do {
+                try await syncEngine.adoptHabit(
+                    habit: habit,
+                    profileId: profileId,
+                    target: habit.defaultTarget,
+                    days: habit.defaultDays,
+                    times: habit.defaultTimes,
+                    today: localDateKey(Date()),
+                    context: modelContext
+                )
+            } catch {
+                print("[HabitPicker] adopt failed: \(error)")
+            }
             adoptingId = nil
         }
     }

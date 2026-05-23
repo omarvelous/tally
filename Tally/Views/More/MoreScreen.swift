@@ -12,10 +12,9 @@ struct MoreScreen: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var auth
-    @Query(filter: #Predicate<TallyTask> { !$0.archived }) private var activeTasks: [TallyTask]
+    @Query private var userHabits: [UserHabit]
     @Query private var settings: [TallySettings]
 
-    @State private var showOnboarding = false
     @State private var showProfile = false
     @State private var showReminders = false
     @State private var showResetConfirm = false
@@ -52,7 +51,8 @@ struct MoreScreen: View {
                                     Text(currentSettings.name.isEmpty ? "Tally" : currentSettings.name)
                                         .font(TallyFont.heading(16, weight: .medium))
                                         .foregroundStyle(c.text)
-                                    Text(verbatim: "\(activeTasks.count) ACTIVE TASKS")
+                                    let activeCount = userHabits.filter { $0.profileId == (auth.userId ?? "") && !$0.isArchived }.count
+                                    Text(verbatim: "\(activeCount) ACTIVE HABITS")
                                         .font(TallyFont.mono(11))
                                         .foregroundStyle(c.dim)
                                 }
@@ -113,9 +113,6 @@ struct MoreScreen: View {
                         navRow("Sign out", sub: "You can sign back in anytime", c: c, danger: true) {
                             showSignOutConfirm = true
                         }
-                        navRow("View onboarding", sub: "Replay the welcome screen", c: c) {
-                            showOnboarding = true
-                        }
                     }
 
                     // Data
@@ -136,9 +133,6 @@ struct MoreScreen: View {
                 .padding(.bottom, 20)
             }
             .background(c.bg)
-        }
-        .sheet(isPresented: $showOnboarding) {
-            OnboardingView()
         }
         .sheet(isPresented: $showProfile) {
             ProfileEditorView()
@@ -241,12 +235,10 @@ struct MoreScreen: View {
     }
 
     private func resetData() {
-        // Delete all entries and tasks
-        try? modelContext.delete(model: LogEntry.self)
-        try? modelContext.delete(model: TallyTask.self)
-        try? modelContext.delete(model: TallySettings.self)
-        #if DEBUG
-        SeedData.seedIfNeeded(context: modelContext)
-        #endif
+        try? modelContext.delete(model: HabitDay.self)
+        try? modelContext.delete(model: UserHabitSchedule.self)
+        try? modelContext.delete(model: UserHabit.self)
+        try? modelContext.delete(model: DaySummary.self)
+        try? modelContext.delete(model: PendingSync.self)
     }
 }

@@ -288,31 +288,153 @@ final class SyncEngine {
         context.insert(schedule)
         try context.save()
 
-        // Push to Supabase
-        try await client
-            .from("user_habits")
-            .insert(PushUserHabit(
-                id: userHabit.id,
-                profile_id: profileId,
-                habit_id: habit.id,
-                sort_order: 0
-            ))
-            .execute()
+        // Generate today's habit_day locally if scheduled
+        let dow = dayOfWeek(Date())
+        let isScheduledToday = days.isEmpty || days.contains(dow)
+        var habitDay: HabitDay?
+        if isScheduledToday {
+            let hd = HabitDay(
+                userHabitId: userHabit.id,
+                scheduleId: schedule.id,
+                date: today,
+                targetSnap: target,
+                unitSnap: habit.unit
+            )
+            context.insert(hd)
+            habitDay = hd
+        }
 
+        // Enqueue all pushes
+        let encoder = JSONEncoder()
+
+        let uhDTO = PushUserHabit(id: userHabit.id, profile_id: profileId, habit_id: habit.id, sort_order: 0)
+        let schedDTO = PushUserHabitSchedule(id: schedule.id, user_habit_id: userHabit.id, target: target, days: days, times: times, effective_from: today)
+
+        let uhPending = PendingSync(table: "user_habits", payload: String(data: try encoder.encode(uhDTO), encoding: .utf8) ?? "")
+        let schedPending = PendingSync(table: "user_habit_schedules", payload: String(data: try encoder.encode(schedDTO), encoding: .utf8) ?? "")
+        context.insert(uhPending)
+        context.insert(schedPending)
+
+        var hdPending: PendingSync?
+        if let hd = habitDay {
+            let hdDTO = PushHabitDay(id: hd.id, user_habit_id: hd.userHabitId, schedule_id: hd.scheduleId, date: hd.date, target_snap: hd.targetSnap, unit_snap: hd.unitSnap, status: hd.status, pct: hd.pct, sum: hd.sum)
+            let p = PendingSync(table: "habit_days", payload: String(data: try encoder.encode(hdDTO), encoding: .utf8) ?? "")
+            context.insert(p)
+            hdPending = p
+        }
+
+        try context.save()
+
+        // Attempt immediate push — failures stay in queue for drainPendingSync
+        do {
+            try await client.from("user_habits").insert(uhDTO).execute()
+            context.delete(uhPending)
+        } catch { print("[SyncEngine] user_habit push queued: \(error.localizedDescription)") }
+
+        do {
+            try await client.from("user_habit_schedules").insert(schedDTO).execute()
+            context.delete(schedPending)
+        } catch { print("[SyncEngine] schedule push queued: \(error.localizedDescription)") }
+
+        if let hd = habitDay, let p = hdPending {
+            do {
+                try await pushHabitDay(hd)
+                context.delete(p)
+            } catch { print("[SyncEngine] habit_day push queued: \(error.localizedDescription)") }
+        }
+
+        try context.save()
+    }
+
+    // MARK: - Pending Sync Queue
+
+    /// Drain all pending sync items. Call on app launch and on connectivity restore.
+    @MainActor
+    func drainPendingSync(context: ModelContext) async {
+        let pending = (try? context.fetch(
+            FetchDescriptor<PendingSync>(sortBy: [SortDescriptor(\.createdAt)])
+        )) ?? []
+
+        guard !pending.isEmpty else { return }
+        print("[SyncEngine] draining \(pending.count) pending sync items")
+
+        for item in pending {
+            guard let data = item.payload.data(using: .utf8) else {
+                context.delete(item)
+                continue
+            }
+
+            do {
+                switch item.table {
+                case "log_entries":
+                    let dto = try JSONDecoder().decode(PushLogEntry.self, from: data)
+                    try await client.from("log_entries").insert(dto).execute()
+                case "user_habits":
+                    let dto = try JSONDecoder().decode(PushUserHabit.self, from: data)
+                    try await client.from("user_habits").insert(dto).execute()
+                case "user_habit_schedules":
+                    let dto = try JSONDecoder().decode(PushUserHabitSchedule.self, from: data)
+                    try await client.from("user_habit_schedules").insert(dto).execute()
+                case "habit_days":
+                    let dto = try JSONDecoder().decode(PushHabitDay.self, from: data)
+                    try await client.from("habit_days").insert(dto).execute()
+                default:
+                    print("[SyncEngine] unknown table: \(item.table)")
+                }
+                // Success — remove from queue
+                context.delete(item)
+                try context.save()
+            } catch {
+                item.retryCount += 1
+                print("[SyncEngine] retry \(item.retryCount) failed for \(item.table): \(error.localizedDescription)")
+                // Leave in queue for next drain cycle
+            }
+        }
+    }
+
+    /// Push a single HabitDay to Supabase
+    func pushHabitDay(_ hd: HabitDay) async throws {
         try await client
-            .from("user_habit_schedules")
-            .insert(PushUserHabitSchedule(
-                id: schedule.id,
-                user_habit_id: userHabit.id,
-                target: target,
-                days: days,
-                times: times,
-                effective_from: today
+            .from("habit_days")
+            .insert(PushHabitDay(
+                id: hd.id,
+                user_habit_id: hd.userHabitId,
+                schedule_id: hd.scheduleId,
+                date: hd.date,
+                target_snap: hd.targetSnap,
+                unit_snap: hd.unitSnap,
+                status: hd.status,
+                pct: hd.pct,
+                sum: hd.sum
             ))
             .execute()
     }
 
-    /// Log a completion: insert log_entry, push to Supabase
+    /// Push all locally-generated habit_days for a date to Supabase
+    @MainActor
+    func pushHabitDaysForDate(_ date: Date, profileId: String, context: ModelContext) async {
+        let dateKey = localDateKey(date)
+        let pid = profileId
+
+        let userHabits = (try? context.fetch(
+            FetchDescriptor<UserHabit>(predicate: #Predicate { $0.profileId == pid })
+        )) ?? []
+        let uhIds = Set(userHabits.map(\.id))
+
+        let allHDs = (try? context.fetch(FetchDescriptor<HabitDay>())) ?? []
+        let todayHDs = allHDs.filter { $0.date == dateKey && uhIds.contains($0.userHabitId) }
+
+        for hd in todayHDs {
+            do {
+                try await pushHabitDay(hd)
+            } catch {
+                // Might already exist on server — that's fine (unique constraint)
+                print("[SyncEngine] pushHabitDay failed for \(hd.id): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Log a completion: update local HabitDay, push log_entry to Supabase
     @MainActor
     func logCompletion(
         habitDayId: String,
@@ -320,31 +442,116 @@ final class SyncEngine {
         timezone: String,
         context: ModelContext
     ) async throws {
-        let logId = UUID().uuidString
-        let now = Date().timeIntervalSince1970 * 1000
+        // 1. Update local HabitDay immediately (mirrors the Postgres trigger)
+        let hdId = habitDayId
+        let descriptor = FetchDescriptor<HabitDay>(predicate: #Predicate { $0.id == hdId })
+        guard let habitDay = (try? context.fetch(descriptor))?.first else { return }
 
-        // The V1 LogEntry model bridges via taskId field
-        let entry = LogEntry(
-            id: logId,
-            taskId: habitDayId,
-            date: "",
-            time: "",
-            value: value,
-            ts: now
-        )
-        context.insert(entry)
+        let newSum = habitDay.sum + value
+        habitDay.sum = newSum
+
+        let target = habitDay.targetSnap
+        let newPct: Double
+        if target == nil || target == 0 {
+            // check/yesno: any value >= 1 = done
+            newPct = newSum >= 1 ? 1.0 : 0.0
+        } else {
+            newPct = newSum / target!
+        }
+        habitDay.pct = newPct
+
+        if newPct >= 1.0 {
+            habitDay.status = "done"
+        } else if newPct > 0 {
+            habitDay.status = "partial"
+        } else {
+            habitDay.status = "pending"
+        }
+
+        // 2. Update local DaySummary
+        recomputeLocalDaySummary(date: habitDay.date, userHabitId: habitDay.userHabitId, context: context)
+
         try context.save()
 
-        // Push to Supabase
-        try await client
-            .from("log_entries")
-            .insert(PushLogEntry(
-                id: logId,
-                habit_day_id: habitDayId,
-                value: value,
-                timezone: timezone
+        // 3. Enqueue + attempt push to Supabase
+        let logId = UUID().uuidString
+        let pushDTO = PushLogEntry(
+            id: logId,
+            habit_day_id: habitDayId,
+            value: value,
+            timezone: timezone
+        )
+
+        let payload = try JSONEncoder().encode(pushDTO)
+        let pending = PendingSync(
+            table: "log_entries",
+            payload: String(data: payload, encoding: .utf8) ?? ""
+        )
+        context.insert(pending)
+        try context.save()
+
+        // Attempt immediate push — if it fails, drainPendingSync will retry
+        do {
+            try await client.from("log_entries").insert(pushDTO).execute()
+            context.delete(pending)
+            try context.save()
+        } catch {
+            print("[SyncEngine] log push queued for retry: \(error.localizedDescription)")
+        }
+    }
+
+    /// Recompute the local DaySummary for a given date after a HabitDay change.
+    @MainActor
+    private func recomputeLocalDaySummary(date: String, userHabitId: String, context: ModelContext) {
+        // Find the profile_id from the user_habit
+        let uhId = userHabitId
+        guard let uh = (try? context.fetch(
+            FetchDescriptor<UserHabit>(predicate: #Predicate { $0.id == uhId })
+        ))?.first else { return }
+
+        let profileId = uh.profileId
+        let dateKey = date
+
+        // Aggregate all habit_days for this profile + date
+        let allHDs = (try? context.fetch(FetchDescriptor<HabitDay>())) ?? []
+        let allUHs = (try? context.fetch(
+            FetchDescriptor<UserHabit>(predicate: #Predicate { $0.profileId == profileId })
+        )) ?? []
+        let uhIds = Set(allUHs.map(\.id))
+
+        let todayHDs = allHDs.filter { $0.date == dateKey && uhIds.contains($0.userHabitId) }
+        let total = todayHDs.count
+        let done = todayHDs.filter { $0.status == "done" }.count
+        let partial = todayHDs.filter { $0.status == "partial" }.count
+        let pending = todayHDs.filter { $0.status == "pending" }.count
+        let pct = total > 0 ? Double(done) / Double(total) : 0
+        let streakDay = total > 0 && done == total
+
+        // Upsert DaySummary
+        let pid = profileId
+        let existingDesc = FetchDescriptor<DaySummary>(
+            predicate: #Predicate { $0.profileId == pid && $0.date == dateKey }
+        )
+        if let existing = (try? context.fetch(existingDesc))?.first {
+            existing.total = total
+            existing.done = done
+            existing.partial = partial
+            existing.overdue = pending
+            existing.pct = pct
+            existing.streakDay = streakDay
+            existing.updatedAt = Date().timeIntervalSince1970 * 1000
+        } else {
+            context.insert(DaySummary(
+                profileId: profileId,
+                date: dateKey,
+                total: total,
+                done: done,
+                partial: partial,
+                overdue: pending,
+                pct: pct,
+                streakDay: streakDay
             ))
-            .execute()
+        }
     }
 
     /// Update a user_habit's schedule (target/days/times change)
@@ -477,14 +684,14 @@ struct RemoteDaySummary: Decodable {
 
 // MARK: - Push DTOs (Encodable — for pushing to Supabase)
 
-struct PushUserHabit: Encodable {
+struct PushUserHabit: Codable {
     let id: String
     let profile_id: String
     let habit_id: String
     let sort_order: Int
 }
 
-struct PushUserHabitSchedule: Encodable {
+struct PushUserHabitSchedule: Codable {
     let id: String
     let user_habit_id: String
     let target: Double?
@@ -493,9 +700,21 @@ struct PushUserHabitSchedule: Encodable {
     let effective_from: String
 }
 
-struct PushLogEntry: Encodable {
+struct PushLogEntry: Codable {
     let id: String
     let habit_day_id: String
     let value: Double
     let timezone: String
+}
+
+struct PushHabitDay: Codable {
+    let id: String
+    let user_habit_id: String
+    let schedule_id: String
+    let date: String
+    let target_snap: Double?
+    let unit_snap: String?
+    let status: String
+    let pct: Double
+    let sum: Double
 }

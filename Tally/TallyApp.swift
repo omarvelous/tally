@@ -52,13 +52,17 @@ struct TallyApp: App {
     private func onSignedIn() async {
         let context = sharedModelContainer.mainContext
 
+        // Drain any pending sync items from previous sessions (offline writes)
+        await syncEngine.drainPendingSync(context: context)
+
         // Pull global catalog + user data from Supabase
         await syncEngine.pullCatalog(context: context)
         if let userId = authService.userId {
             await syncEngine.pullUserData(context: context, profileId: userId)
 
-            // Generate today's habit_days locally (idempotent)
+            // Generate today's habit_days locally (idempotent) + push to Supabase
             HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
+            await syncEngine.pushHabitDaysForDate(Date(), profileId: userId, context: context)
         }
 
         // Schedule notifications (still uses V1 tasks for now)

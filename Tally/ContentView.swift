@@ -37,11 +37,6 @@ struct ContentView: View {
                 .presentationDetents([.fraction(0.95)])
                 .presentationDragIndicator(.visible)
         }
-        .onAppear {
-            #if DEBUG
-            SeedData.seedIfNeeded(context: modelContext)
-            #endif
-        }
     }
 }
 
@@ -49,5 +44,7 @@ struct ContentView: View {
     ContentView()
         .environment(NotificationScheduler())
         .environment(MidnightObserver())
-        .modelContainer(for: [TallyTask.self, LogEntry.self, TallySettings.self], inMemory: true)
+        .environment(AuthService())
+        .environment(SyncEngine())
+        .modelContainer(for: TallySchemaV2.models, inMemory: true)
 }
