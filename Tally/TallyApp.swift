@@ -14,8 +14,13 @@ struct TallyApp: App {
     @State private var midnightObserver = MidnightObserver()
     @State private var authService = AuthService()
     @State private var syncEngine = SyncEngine()
-    @State private var needsOnboarding = false
-    @State private var catalogReady = false
+    @State private var appPhase: AppPhase = .loading
+
+    enum AppPhase {
+        case loading
+        case onboarding
+        case ready
+    }
 
     var sharedModelContainer: ModelContainer = {
         do {
@@ -31,16 +36,17 @@ struct TallyApp: App {
                 if authService.isLoading {
                     ProgressView()
                 } else if authService.isSignedIn {
-                    if !catalogReady {
+                    switch appPhase {
+                    case .loading:
                         ProgressView("Loading habits...")
                             .environment(syncEngine)
                             .task { await onSignedIn() }
-                    } else if needsOnboarding {
+                    case .onboarding:
                         OnboardingScreen {
                             Task { await onOnboardingComplete() }
                         }
                         .environment(syncEngine)
-                    } else {
+                    case .ready:
                         ContentView()
                             .environment(notificationScheduler)
                             .environment(midnightObserver)
@@ -67,25 +73,31 @@ struct TallyApp: App {
 
         // Pull global catalog + user data from Supabase
         await syncEngine.pullCatalog(context: context)
-        if let userId = authService.userId {
-            await syncEngine.pullUserData(context: context, profileId: userId)
 
-            // Check if user has any habits — if not, show onboarding
-            let pid = userId
-            let userHabits = (try? context.fetch(
-                FetchDescriptor<UserHabit>(predicate: #Predicate { $0.profileId == pid })
-            )) ?? []
-
-            if userHabits.isEmpty {
-                needsOnboarding = true
-            } else {
-                // Generate today's habit_days locally (idempotent) + push to Supabase
-                HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
-                await syncEngine.pushHabitDaysForDate(Date(), profileId: userId, context: context)
-            }
+        guard let userId = authService.userId else {
+            print("[TallyApp] no userId after sign-in — skipping to ready")
+            appPhase = .ready
+            return
         }
 
-        catalogReady = true
+        await syncEngine.pullUserData(context: context, profileId: userId)
+
+        // Check if user has any habits — if not, show onboarding
+        let pid = userId
+        let userHabits = (try? context.fetch(
+            FetchDescriptor<UserHabit>(predicate: #Predicate { $0.profileId == pid })
+        )) ?? []
+
+        print("[TallyApp] userId=\(userId), userHabits=\(userHabits.count)")
+
+        if userHabits.isEmpty {
+            appPhase = .onboarding
+        } else {
+            // Generate today's habit_days locally (idempotent) + push to Supabase
+            HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
+            await syncEngine.pushHabitDaysForDate(Date(), profileId: userId, context: context)
+            appPhase = .ready
+        }
 
         // Schedule notifications
         await notificationScheduler.requestPermission()
@@ -99,7 +111,7 @@ struct TallyApp: App {
             HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
             await syncEngine.pushHabitDaysForDate(Date(), profileId: userId, context: context)
         }
-        withAnimation { needsOnboarding = false }
+        withAnimation { appPhase = .ready }
     }
 
     @MainActor
