@@ -2,47 +2,58 @@
 //  TasksScreen.swift
 //  Tally
 //
-//  Tasks library: active + archived views, swipe-to-log, sort toggle.
+//  Habits library: active + archived, swipe-to-log, sort toggle.
+//  V2: reads from UserHabit + Habit + HabitDay.
 
 import SwiftUI
 import SwiftData
 
 struct TasksScreen: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
     @Environment(LogSheetCoordinator.self) private var logCoordinator
-    @Query private var allTasks: [TallyTask]
-    @Query private var allEntries: [LogEntry]
+    @Environment(AuthService.self) private var auth
+    @Query private var allUserHabits: [UserHabit]
+    @Query private var allHabits: [Habit]
+    @Query private var allHabitDays: [HabitDay]
+    @Query private var allSchedules: [UserHabitSchedule]
 
     @State private var sortBy: SortOption = .rate
     @State private var viewFilter: ViewFilter = .active
-    @State private var showTemplatePicker = false
-    @State private var showCustomForm = false
-    @State private var templateToCustomize: TaskTemplate?
-    @State private var quickAddedTaskName: String?
-    @State private var quickAddedTaskId: String?
-    @State private var selectedTaskId: String?
+    @State private var showHabitPicker = false
 
     enum SortOption: String { case rate, name }
     enum ViewFilter: String { case active, archived }
 
-    private var activeTasks: [TallyTask] { allTasks.filter { !$0.archived } }
-    private var archivedTasks: [TallyTask] { allTasks.filter { $0.archived } }
-
     var body: some View {
         let c = TallyColors.resolve(colorScheme)
         let now = Date()
-        let visibleTasks = viewFilter == .active ? activeTasks : archivedTasks
+        let profileId = auth.userId ?? ""
 
-        let rated = visibleTasks.map { task -> (TallyTask, [Double], Int) in
-            let hist = taskHistoryFor(task: task, entries: allEntries, now: now)
-            let rate = hist.isEmpty ? 0 : Int((hist.reduce(0, +) / Double(hist.count) * 100).rounded())
-            return (task, hist, rate)
+        let myHabits = allUserHabits.filter { $0.profileId == profileId }
+        let active = myHabits.filter { !$0.isArchived }
+        let archived = myHabits.filter { $0.isArchived }
+        let visible = viewFilter == .active ? active : archived
+
+        // Build habit lookup
+        let habitMap = Dictionary(allHabits.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let schedMap = Dictionary(
+            allSchedules.filter { $0.effectiveTo == nil }.map { ($0.userHabitId, $0) },
+            uniquingKeysWith: { a, _ in a }
+        )
+
+        // Resolve each user_habit with sparkline and rate
+        let resolved: [(UserHabit, Habit, [Double], Int)] = visible.compactMap { uh in
+            guard let habit = habitMap[uh.habitId] else { return nil }
+            let sparkline = habitSparkline(userHabitId: uh.id, now: now, context: modelContext)
+            let rate = sparkline.isEmpty ? 0 : Int((sparkline.reduce(0, +) / Double(sparkline.count) * 100).rounded())
+            return (uh, habit, sparkline, rate)
         }
 
-        let sorted = rated.sorted { a, b in
+        let sorted = resolved.sorted { a, b in
             switch sortBy {
-            case .rate: return a.2 > b.2
-            case .name: return a.0.name.localizedCompare(b.0.name) == .orderedAscending
+            case .rate: return a.3 > b.3
+            case .name: return a.1.name.localizedCompare(b.1.name) == .orderedAscending
             }
         }
 
@@ -52,22 +63,20 @@ struct TasksScreen: View {
                     // Header
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(verbatim: "LIBRARY · \(activeTasks.count) ACTIVE · \(archivedTasks.count) ARCHIVED")
+                            Text(verbatim: "LIBRARY · \(active.count) ACTIVE · \(archived.count) ARCHIVED")
                                 .font(TallyFont.label())
                                 .textCase(.uppercase)
                                 .tracking(1.2)
                                 .foregroundStyle(c.dim)
-                            Text("Tasks")
+                            Text("Habits")
                                 .font(TallyFont.heading(32, weight: .medium))
                                 .foregroundStyle(c.text)
                         }
                         Spacer()
-                        Button {
-                            showTemplatePicker = true
-                        } label: {
+                        Button { showHabitPicker = true } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "plus")
-                                Text("NEW")
+                                Text("ADD")
                             }
                             .font(TallyFont.mono(11, weight: .semibold))
                             .padding(.horizontal, 12)
@@ -81,8 +90,8 @@ struct TasksScreen: View {
 
                     // Filter + Sort chips
                     HStack(spacing: 4) {
-                        filterChip("ACTIVE · \(activeTasks.count)", filter: .active, c: c)
-                        filterChip("ARCHIVED · \(archivedTasks.count)", filter: .archived, c: c)
+                        filterChip("ACTIVE · \(active.count)", filter: .active, c: c)
+                        filterChip("ARCHIVED · \(archived.count)", filter: .archived, c: c)
                         Spacer()
                         sortButton("BY RATE", option: .rate, c: c)
                         sortButton("BY NAME", option: .name, c: c)
@@ -90,37 +99,36 @@ struct TasksScreen: View {
 
                     if sorted.isEmpty {
                         VStack(spacing: 6) {
-                            Text(viewFilter == .active ? "No tasks yet" : "No archived tasks")
+                            Text(viewFilter == .active ? "No habits yet" : "No archived habits")
                                 .font(TallyFont.heading(18, weight: .medium))
                                 .foregroundStyle(c.text)
-                            Text(viewFilter == .active ? "Add your first task to start tracking." : "Archived tasks will appear here.")
+                            Text(viewFilter == .active ? "Browse the catalog to add your first habit." : "Archived habits will appear here.")
                                 .font(TallyFont.body(13))
                                 .foregroundStyle(c.dim)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.top, 40)
                     } else {
-                        // Task rows
-                        ForEach(sorted, id: \.0.id) { task, hist, rate in
-                            if viewFilter == .active {
+                        // Habit rows
+                        ForEach(sorted, id: \.0.id) { uh, habit, sparkline, rate in
+                            let sched = schedMap[uh.id]
+                            let todayKey = localDateKey(now)
+                            let todayHD = allHabitDays.first { $0.userHabitId == uh.id && $0.date == todayKey }
+                            let isArchived = viewFilter == .archived
+
+                            if !isArchived, let hdId = todayHD?.id {
                                 SwipeableRow(pillLabel: "LOG →", pillColor: c.pos) {
-                                    logCoordinator.open(task.id)
+                                    logCoordinator.open(hdId)
                                 } content: {
-                                    taskRow(task: task, hist: hist, rate: rate, isArchived: false, c: c)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture { selectedTaskId = task.id }
+                                    habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: false, c: c)
                                 }
                             } else {
-                                // Archived: tap only, no swipe
-                                taskRow(task: task, hist: hist, rate: rate, isArchived: true, c: c)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { selectedTaskId = task.id }
-                                    .opacity(0.6)
+                                habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: isArchived, c: c)
+                                    .opacity(isArchived ? 0.6 : 1)
                             }
                         }
 
-                        // Footer hint
-                        Text(viewFilter == .active ? "TAP TO VIEW · SWIPE LEFT TO LOG" : "TAP TO REVIEW + RESTORE")
+                        Text(viewFilter == .active ? "SWIPE LEFT TO LOG" : "")
                             .font(TallyFont.mono(10))
                             .tracking(1.4)
                             .foregroundStyle(c.dim)
@@ -132,55 +140,16 @@ struct TasksScreen: View {
                 .padding(.bottom, 20)
             }
             .background(c.bg)
-            .navigationDestination(item: $selectedTaskId) { taskId in
-                TaskStatsView(taskId: taskId)
-            }
         }
-        .sheet(isPresented: $showTemplatePicker) {
-            TaskTemplatePicker { result in
-                switch result {
-                case .custom:
-                    showCustomForm = true
-                case .quickAdded(let task):
-                    quickAddedTaskName = task.name
-                    quickAddedTaskId = task.id
-                case .customize(let template):
-                    templateToCustomize = template
-                }
-            }
-        }
-        .sheet(isPresented: $showCustomForm) {
-            TaskFormView(taskId: nil)
-        }
-        .sheet(item: $templateToCustomize) { template in
-            TaskFormView(taskId: nil, template: template)
-        }
-        .overlay(alignment: .bottom) {
-            if let name = quickAddedTaskName {
-                QuickAddToast(
-                    taskName: name,
-                    onEdit: {
-                        if let id = quickAddedTaskId {
-                            quickAddedTaskName = nil
-                            quickAddedTaskId = nil
-                            selectedTaskId = id
-                        }
-                    },
-                    onDismiss: {
-                        quickAddedTaskName = nil
-                        quickAddedTaskId = nil
-                    }
-                )
-            }
+        .sheet(isPresented: $showHabitPicker) {
+            HabitPickerView()
         }
     }
 
     // MARK: - Chips
 
     private func filterChip(_ label: String, filter: ViewFilter, c: TallyColors) -> some View {
-        Button {
-            viewFilter = filter
-        } label: {
+        Button { viewFilter = filter } label: {
             Text(verbatim: label)
                 .font(TallyFont.mono(10, weight: .semibold))
                 .tracking(1.0)
@@ -194,9 +163,7 @@ struct TasksScreen: View {
     }
 
     private func sortButton(_ label: String, option: SortOption, c: TallyColors) -> some View {
-        Button {
-            sortBy = option
-        } label: {
+        Button { sortBy = option } label: {
             Text(label)
                 .font(TallyFont.mono(10, weight: .semibold))
                 .tracking(1.0)
@@ -209,24 +176,23 @@ struct TasksScreen: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Task row
+    // MARK: - Habit row
 
-    private func taskRow(task: TallyTask, hist: [Double], rate: Int, isArchived: Bool, c: TallyColors) -> some View {
-        let sched = describeSchedule(task)
-        let daysCompact = compactDays(task)
+    private func habitRow(habit: Habit, sched: UserHabitSchedule?, sparkline: [Double], rate: Int, isArchived: Bool, c: TallyColors) -> some View {
+        let daysLabel = compactDays(sched?.days ?? [])
+        let timesLabel = (sched?.times.first ?? "all-day").uppercased()
+        let targetLabel = sched?.target != nil ? " · \(Int(sched!.target!)) \(habit.unit ?? "")" : ""
         let rateColor = isArchived ? c.dim : (rate >= 90 ? c.pos : rate >= 70 ? c.text : c.neg)
         let dotColor = isArchived ? c.dim3 : (rate >= 90 ? c.pos : rate >= 70 ? c.accent : c.neg)
 
         return HStack(spacing: 10) {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 6, height: 6)
+            Circle().fill(dotColor).frame(width: 6, height: 6)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(task.name)
+                Text(habit.name)
                     .font(TallyFont.heading(14, weight: .medium))
                     .foregroundStyle(isArchived ? c.dim : c.text)
-                Text(verbatim: "\(daysCompact) · \(sched.times.uppercased()) · \(task.type.rawValue.uppercased())\(task.target != nil ? " · \(Int(task.target!)) \(task.unit ?? "")" : "")")
+                Text(verbatim: "\(daysLabel) · \(timesLabel) · \(habit.habitType.uppercased())\(targetLabel)")
                     .font(TallyFont.mono(10))
                     .foregroundStyle(c.dim)
                     .lineLimit(1)
@@ -234,7 +200,7 @@ struct TasksScreen: View {
 
             Spacer()
 
-            SparklineView(values: hist, width: 48, height: 16)
+            SparklineView(values: sparkline, width: 48, height: 16)
 
             Text(verbatim: "\(rate)%")
                 .font(TallyFont.mono(11, weight: .semibold))
@@ -248,15 +214,10 @@ struct TasksScreen: View {
         }
     }
 
-    private func compactDays(_ task: TallyTask) -> String {
-        if task.days.isEmpty || task.days.count == 7 {
-            return "DAILY"
-        } else if task.days.count == 5 && task.days.sorted() == [0, 1, 2, 3, 4] {
-            return "WKDAYS"
-        } else if task.days.count == 2 && task.days.contains(5) && task.days.contains(6) {
-            return "WKENDS"
-        } else {
-            return task.days.sorted().map { dayLabels[$0] }.joined(separator: "/")
-        }
+    private func compactDays(_ days: [Int]) -> String {
+        if days.isEmpty || days.count == 7 { return "DAILY" }
+        if days.count == 5 && days.sorted() == [0, 1, 2, 3, 4] { return "WKDAYS" }
+        if days.count == 2 && days.contains(5) && days.contains(6) { return "WKENDS" }
+        return days.sorted().map { dayLabels[$0] }.joined(separator: "/")
     }
 }
