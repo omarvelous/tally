@@ -13,6 +13,7 @@ struct TallyApp: App {
     @State private var notificationScheduler = NotificationScheduler()
     @State private var midnightObserver = MidnightObserver()
     @State private var authService = AuthService()
+    @State private var syncEngine = SyncEngine()
 
     var sharedModelContainer: ModelContainer = {
         do {
@@ -31,9 +32,9 @@ struct TallyApp: App {
                     ContentView()
                         .environment(notificationScheduler)
                         .environment(midnightObserver)
+                        .environment(syncEngine)
                         .task {
-                            await notificationScheduler.requestPermission()
-                            scheduleNotifications()
+                            await onSignedIn()
                         }
                 } else {
                     SignInView()
@@ -45,6 +46,24 @@ struct TallyApp: App {
             }
         }
         .modelContainer(sharedModelContainer)
+    }
+
+    @MainActor
+    private func onSignedIn() async {
+        let context = sharedModelContainer.mainContext
+
+        // Pull global catalog + user data from Supabase
+        await syncEngine.pullCatalog(context: context)
+        if let userId = authService.userId {
+            await syncEngine.pullUserData(context: context, profileId: userId)
+
+            // Generate today's habit_days locally (idempotent)
+            HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
+        }
+
+        // Schedule notifications (still uses V1 tasks for now)
+        await notificationScheduler.requestPermission()
+        scheduleNotifications()
     }
 
     @MainActor
