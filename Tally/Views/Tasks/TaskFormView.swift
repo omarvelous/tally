@@ -9,6 +9,12 @@ import SwiftData
 
 struct TaskFormView: View {
     let taskId: String?
+    let template: TaskTemplate?
+
+    init(taskId: String?, template: TaskTemplate? = nil) {
+        self.taskId = taskId
+        self.template = template
+    }
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
@@ -18,11 +24,15 @@ struct TaskFormView: View {
     @State private var name: String = ""
     @State private var type: TaskType = .count
     @State private var target: String = "100"
-    @State private var unit: String = "reps"
+    @State private var unitSelection: String = "reps"
+    @State private var showCustomUnit: Bool = false
+    @State private var customUnit: String = ""
     @State private var days: Set<Int> = Set(0...6)
     @State private var times: [String] = ["08:00"]
     @State private var isAllDay: Bool = false
     @State private var showDeleteConfirm = false
+
+    private let catalog = loadTemplateCatalog()
 
     private var isEdit: Bool { taskId != nil }
     private var existing: TallyTask? { taskId.flatMap { id in tasks.first { $0.id == id } } }
@@ -31,6 +41,19 @@ struct TaskFormView: View {
     private var requiresTarget: Bool { type == .count || type == .timer }
     private var validTarget: Bool { !requiresTarget || (Double(target) ?? 0) > 0 }
     private var isValid: Bool { validName && validTarget && !days.isEmpty }
+
+    /// The resolved unit string for saving.
+    private var resolvedUnit: String {
+        showCustomUnit ? customUnit : unitSelection
+    }
+
+    /// Which units to show in the dropdown.
+    private var availableUnits: [String] {
+        if let allowed = template?.allowedUnits, !allowed.isEmpty {
+            return allowed
+        }
+        return catalog.units
+    }
 
     var body: some View {
         let c = TallyColors.resolve(colorScheme)
@@ -67,7 +90,7 @@ struct TaskFormView: View {
                 }
             }
         }
-        .onAppear { loadExisting() }
+        .onAppear { loadInitialState() }
         .confirmationDialog("Delete \"\(existing?.name ?? "")\"?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete task & all history", role: .destructive) { deleteTask() }
         } message: {
@@ -177,13 +200,53 @@ struct TaskFormView: View {
                     .textCase(.uppercase)
                     .tracking(1.2)
                     .foregroundStyle(c.dim)
-                TextField("reps · oz · kg", text: $unit)
-                    .font(TallyFont.heading(22, weight: .medium))
-                    .foregroundStyle(c.text)
+
+                if showCustomUnit {
+                    // Custom text field with cancel button
+                    HStack(spacing: 8) {
+                        TextField("e.g. glasses", text: $customUnit)
+                            .font(TallyFont.heading(22, weight: .medium))
+                            .foregroundStyle(c.text)
+                        Button {
+                            showCustomUnit = false
+                            customUnit = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(c.dim2)
+                        }
+                    }
                     .padding(.vertical, 10)
                     .overlay(alignment: .bottom) {
-                        Rectangle().fill(c.rule).frame(height: 1)
+                        Rectangle().fill(c.accent).frame(height: 2)
                     }
+                } else {
+                    // Dropdown menu
+                    Menu {
+                        ForEach(availableUnits, id: \.self) { u in
+                            Button(u) { unitSelection = u }
+                        }
+                        Divider()
+                        Button("Other...") {
+                            showCustomUnit = true
+                            customUnit = ""
+                        }
+                    } label: {
+                        HStack {
+                            Text(unitSelection)
+                                .font(TallyFont.heading(22, weight: .medium))
+                                .foregroundStyle(c.text)
+                            Spacer()
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 12))
+                                .foregroundStyle(c.dim2)
+                        }
+                        .padding(.vertical, 10)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(c.rule).frame(height: 1)
+                        }
+                    }
+                }
             }
         }
     }
@@ -354,19 +417,46 @@ struct TaskFormView: View {
 
     // MARK: - Actions
 
-    private func loadExisting() {
-        guard let task = existing else { return }
-        name = task.name
-        type = task.type
-        target = task.target != nil ? String(Int(task.target!)) : "100"
-        unit = task.unit ?? ""
-        days = task.days.isEmpty ? Set(0...6) : Set(task.days)
-        if task.times.first == "all-day" {
-            isAllDay = true
-            times = ["all-day"]
-        } else {
-            isAllDay = false
-            times = task.times
+    private func loadInitialState() {
+        if let task = existing {
+            // Edit mode: load from existing task
+            name = task.name
+            type = task.type
+            target = task.target != nil ? String(Int(task.target!)) : "100"
+            let existingUnit = task.unit ?? ""
+            if !existingUnit.isEmpty && availableUnits.contains(existingUnit) {
+                unitSelection = existingUnit
+                showCustomUnit = false
+            } else if !existingUnit.isEmpty {
+                showCustomUnit = true
+                customUnit = existingUnit
+            }
+            days = task.days.isEmpty ? Set(0...6) : Set(task.days)
+            if task.times.first == "all-day" {
+                isAllDay = true
+                times = ["all-day"]
+            } else {
+                isAllDay = false
+                times = task.times
+            }
+        } else if let t = template {
+            // Template mode: pre-fill from template
+            name = t.name
+            type = TaskType(rawValue: t.type) ?? .check
+            target = t.target != nil ? String(Int(t.target!)) : ""
+            if let u = t.unit {
+                unitSelection = u
+            }
+            showCustomUnit = false
+            let d = templateDays(t.days)
+            days = d.isEmpty ? Set(0...6) : Set(d)
+            if t.times.first == "all-day" {
+                isAllDay = true
+                times = ["all-day"]
+            } else {
+                isAllDay = false
+                times = t.times
+            }
         }
     }
 
@@ -375,7 +465,8 @@ struct TaskFormView: View {
         let finalDays = Array(days).sorted()
         let finalTimes = isAllDay ? ["all-day"] : times
         let finalTarget: Double? = requiresTarget ? Double(target) : nil
-        let finalUnit: String? = (type == .check || type == .yesno) ? nil : (unit.trimmingCharacters(in: .whitespaces).isEmpty ? nil : unit.trimmingCharacters(in: .whitespaces))
+        let unitStr = resolvedUnit.trimmingCharacters(in: .whitespaces)
+        let finalUnit: String? = (type == .check || type == .yesno) ? nil : (unitStr.isEmpty ? nil : unitStr)
 
         if let task = existing {
             task.name = trimmedName
@@ -396,6 +487,8 @@ struct TaskFormView: View {
             )
             modelContext.insert(task)
         }
+        try? modelContext.save()
+        reloadWidgets()
         dismiss()
     }
 
@@ -407,11 +500,9 @@ struct TaskFormView: View {
 
     private func suggestUnit(for newType: TaskType) {
         if isEdit { return }
-        switch newType {
-        case .count: if unit == "min" || unit.isEmpty { unit = "reps" }
-        case .timer: unit = "min"
-        case .numeric: if unit == "reps" || unit == "min" { unit = "kg" }
-        default: break
+        if let suggested = catalog.defaultUnits[newType.rawValue] {
+            unitSelection = suggested
+            showCustomUnit = false
         }
     }
 }

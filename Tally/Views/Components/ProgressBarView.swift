@@ -16,13 +16,25 @@ struct ProgressBarView: View {
 
     var body: some View {
         let c = TallyColors.resolve(colorScheme)
+        let overTarget = pct > 1.0
+        let basePct = overTarget ? 1.0 / pct : min(pct, 1.0)
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: radius)
                     .fill(c.bg3)
-                RoundedRectangle(cornerRadius: radius)
-                    .fill(color ?? c.accent)
-                    .frame(width: geo.size.width * min(pct, 1.0))
+                if overTarget {
+                    // Full bar in warn to show over-target
+                    RoundedRectangle(cornerRadius: radius)
+                        .fill(c.warn)
+                    // Base portion (up to target) in normal color
+                    RoundedRectangle(cornerRadius: radius)
+                        .fill(color ?? c.accent)
+                        .frame(width: geo.size.width * basePct)
+                } else {
+                    RoundedRectangle(cornerRadius: radius)
+                        .fill(color ?? c.accent)
+                        .frame(width: geo.size.width * basePct)
+                }
             }
         }
         .frame(height: height)

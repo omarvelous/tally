@@ -19,6 +19,7 @@ struct LogSheet: View {
     @Query private var allEntries: [LogEntry]
 
     @State private var stagedValue: String = ""
+    @State private var usingPlaceholder: Bool = true
     @State private var deleteTarget: LogEntry?
 
     var body: some View {
@@ -30,70 +31,69 @@ struct LogSheet: View {
             let state = taskStateFor(task: task, date: startOfDay(now), entries: allEntries, now: now)
             let todayEntries = allEntries
                 .filter { $0.taskId == taskId && $0.date == todayKey && !$0.deleted }
-                .sorted { $0.time < $1.time }
+                .sorted { $0.ts > $1.ts }
             let sched = describeSchedule(task)
+            let lastValue = todayEntries.first?.value
 
-            NavigationStack {
-                VStack(spacing: 0) {
-                    // Scrollable content
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            // Schedule + status
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(verbatim: "\(sched.times.uppercased()) · \(sched.days.uppercased())")
-                                    .font(TallyFont.label())
-                                    .textCase(.uppercase)
-                                    .tracking(1.2)
-                                    .foregroundStyle(c.dim)
-                                HStack {
-                                    Text(task.name)
-                                        .font(TallyFont.heading(24, weight: .medium))
-                                        .foregroundStyle(c.text)
-                                    Spacer()
-                                    statusPill(state: state, c: c)
-                                }
-                            }
-
-                            // Hero card
-                            TaskHeroCard(task: task, state: state)
-
-                            // Today's entries (swipe-to-delete)
-                            if !todayEntries.isEmpty {
-                                entriesList(task: task, entries: todayEntries, state: state, c: c)
-                            }
-
-                            // 14-day trend
-                            miniTrend(task: task, now: now, c: c)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                        .padding(.bottom, 16)
-                    }
-
-                    // Pinned footer — log controls
-                    Divider()
-                    logFooter(task: task, state: state, todayKey: todayKey, now: now, c: c)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(c.bg)
-                }
-                .background(c.bg)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("CLOSE") { dismiss() }
-                            .font(TallyFont.mono(11))
+            VStack(spacing: 0) {
+                // Static header
+                VStack(alignment: .leading, spacing: 16) {
+                    // Schedule + status
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(verbatim: "\(sched.times.uppercased()) · \(sched.days.uppercased())")
+                            .font(TallyFont.label())
+                            .textCase(.uppercase)
+                            .tracking(1.2)
                             .foregroundStyle(c.dim)
+                        HStack {
+                            Text(task.name)
+                                .font(TallyFont.heading(24, weight: .medium))
+                                .foregroundStyle(c.text)
+                            Spacer()
+                            statusPill(state: state, c: c)
+                        }
                     }
+
+                    // Hero card
+                    TaskHeroCard(task: task, state: state)
+
+                    // 14-day trend (above entries)
+                    miniTrend(task: task, now: now, c: c)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+
+                // Scrollable entries list
+                if !todayEntries.isEmpty {
+                    ScrollView {
+                        entriesList(task: task, entries: todayEntries, state: state, c: c)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 16)
+                    }
+                } else {
+                    Spacer()
+                }
+
+                // Pinned footer — log controls
+                Divider()
+                logFooter(task: task, state: state, todayKey: todayKey, now: now, lastValue: lastValue, c: c)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(c.bg)
             }
-            .confirmationDialog(
+            .background(c.bg)
+            .alert(
                 deleteConfirmTitle,
-                isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
-                titleVisibility: .visible
+                isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
             ) {
-                Button("Delete entry", role: .destructive) {
+                Button("Cancel", role: .cancel) {
+                    deleteTarget = nil
+                }
+                Button("Delete", role: .destructive) {
                     if let entry = deleteTarget {
-                        entry.deleted = true  // soft delete — data preserved
+                        entry.deleted = true
+                        try? modelContext.save()
                         WidgetCenter.shared.reloadAllTimelines()
                         deleteTarget = nil
                     }
@@ -145,7 +145,7 @@ struct LogSheet: View {
                     deleteTarget = entry
                 } content: {
                     HStack(spacing: 8) {
-                        Text(verbatim: String(format: "%02d", index + 1))
+                        Text(verbatim: String(format: "%02d", entries.count - index))
                             .font(TallyFont.mono(11))
                             .foregroundStyle(c.dim)
                             .frame(width: 24)
@@ -162,7 +162,6 @@ struct LogSheet: View {
                             .frame(width: 36, alignment: .trailing)
                     }
                     .padding(.vertical, 10)
-                    .background(c.bg)
                 }
                 .overlay(alignment: .bottom) {
                     Rectangle().fill(c.rule).frame(height: 1)
@@ -195,9 +194,11 @@ struct LogSheet: View {
     // MARK: - Pinned footer (log controls)
 
     @ViewBuilder
-    private func logFooter(task: TallyTask, state: TaskStatus, todayKey: String, now: Date, c: TallyColors) -> some View {
+    private func logFooter(task: TallyTask, state: TaskStatus, todayKey: String, now: Date, lastValue: Double?, c: TallyColors) -> some View {
         switch task.type {
         case .count, .timer:
+            let placeholderText = lastValue != nil ? "\(Int(lastValue!))" : "0"
+
             VStack(alignment: .leading, spacing: 8) {
                 Text(task.type == .count ? "QUICK ADD" : "ADD MINUTES")
                     .font(TallyFont.label())
@@ -207,51 +208,60 @@ struct LogSheet: View {
 
                 let presets = task.type == .count ? pickPresets(for: task) : [5, 10, 15, task.target ?? 20]
                 PresetChipGrid(values: presets, unit: task.unit, selectedValue: Double(stagedValue)) { value in
-                    stagedValue = "\(Int(value))"
+                    // Stack: add to current staged value
+                    let current = Double(stagedValue) ?? 0
+                    let newValue = Int(current + value)
+                    stagedValue = "\(newValue)"
+                    usingPlaceholder = false
                 }
 
                 // Editable input + LOG button
                 HStack(spacing: 8) {
                     HStack(alignment: .firstTextBaseline) {
-                        TextField("0", text: $stagedValue)
+                        TextField(placeholderText, text: $stagedValue)
                             .keyboardType(.decimalPad)
                             .font(TallyFont.mono(18, weight: .semibold))
                             .foregroundStyle(c.text)
+                            .multilineTextAlignment(.trailing)
+                            .onChange(of: stagedValue) {
+                                usingPlaceholder = false
+                            }
                         Text(verbatim: (task.unit ?? (task.type == .timer ? "min" : "")).uppercased())
                             .font(TallyFont.mono(11))
                             .foregroundStyle(c.dim)
                     }
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 12)
                     .background(c.bg2)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(stagedValue.isEmpty ? c.rule : c.accent, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(stagedValue.isEmpty && !usingPlaceholder ? c.rule : c.accent, lineWidth: 1))
 
-                    Spacer()
-                }
-
-                Button {
-                    if let v = Double(stagedValue), v > 0 {
-                        logValue(v, taskId: task.id, date: todayKey, now: now)
-                        stagedValue = ""
+                    Button {
+                        let v: Double? = stagedValue.isEmpty && usingPlaceholder ? lastValue : Double(stagedValue)
+                        if let v = v, v > 0 {
+                            logValue(v, taskId: task.id, date: todayKey, now: now)
+                            dismiss()
+                        }
+                    } label: {
+                        let displayValue = stagedValue.isEmpty && usingPlaceholder ? placeholderText : stagedValue
+                        let hasValue = (Double(displayValue) ?? 0) > 0
+                        Text("LOG")
+                            .font(TallyFont.heading(14, weight: .medium))
+                            .padding(.horizontal, 20)
+                            .frame(height: 46)
+                            .background(hasValue ? c.accent : c.dim3)
+                            .foregroundStyle(hasValue ? .white : c.dim)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
-                } label: {
-                    Text(verbatim: stagedValue.isEmpty ? "LOG" : "LOG +\(stagedValue)")
-                        .font(TallyFont.heading(14, weight: .medium))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background((Double(stagedValue) ?? 0) > 0 ? c.accent : c.dim3)
-                        .foregroundStyle((Double(stagedValue) ?? 0) > 0 ? .white : c.dim)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .disabled((Double(stagedValue) ?? 0) <= 0)
             }
 
         case .check:
             Button {
                 if state.status != .done {
                     logValue(1.0, taskId: task.id, date: todayKey, now: now)
+                    dismiss()
                 }
             } label: {
                 HStack {
@@ -282,14 +292,18 @@ struct LogSheet: View {
                 HStack(spacing: 8) {
                     yesNoButton(label: "Yes", isActive: state.label == "Yes", c: c) {
                         logValue(1.0, taskId: task.id, date: todayKey, now: now)
+                        dismiss()
                     }
                     yesNoButton(label: "No", isActive: state.label == "No", c: c) {
                         logValue(0.0, taskId: task.id, date: todayKey, now: now)
+                        dismiss()
                     }
                 }
             }
 
         case .numeric:
+            let placeholderText = lastValue != nil ? String(format: "%.1f", lastValue!) : "0.0"
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("ENTER READING")
                     .font(TallyFont.label())
@@ -298,10 +312,13 @@ struct LogSheet: View {
                     .foregroundStyle(c.dim)
                 HStack(spacing: 8) {
                     HStack(alignment: .firstTextBaseline) {
-                        TextField("0.0", text: $stagedValue)
+                        TextField(placeholderText, text: $stagedValue)
                             .keyboardType(.decimalPad)
                             .font(TallyFont.mono(28, weight: .semibold))
                             .foregroundStyle(c.text)
+                            .onChange(of: stagedValue) {
+                                usingPlaceholder = false
+                            }
                         Text(verbatim: (task.unit ?? "").uppercased())
                             .font(TallyFont.mono(13))
                             .foregroundStyle(c.dim)
@@ -313,21 +330,21 @@ struct LogSheet: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(c.rule, lineWidth: 1))
                 }
                 Button {
-                    if let v = Double(stagedValue) {
+                    let v: Double? = stagedValue.isEmpty && usingPlaceholder ? lastValue : Double(stagedValue)
+                    if let v = v {
                         logValue(v, taskId: task.id, date: todayKey, now: now)
-                        stagedValue = ""
+                        dismiss()
                     }
                 } label: {
                     Text("SAVE")
                         .font(TallyFont.heading(14, weight: .medium))
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
-                        .background(Double(stagedValue) != nil ? c.accent : c.dim3)
-                        .foregroundStyle(Double(stagedValue) != nil ? .white : c.dim)
+                        .background((stagedValue.isEmpty && usingPlaceholder && lastValue != nil) || Double(stagedValue) != nil ? c.accent : c.dim3)
+                        .foregroundStyle((stagedValue.isEmpty && usingPlaceholder && lastValue != nil) || Double(stagedValue) != nil ? .white : c.dim)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
-                .disabled(Double(stagedValue) == nil)
             }
         }
     }
@@ -354,7 +371,7 @@ struct LogSheet: View {
                         }
                         RoundedRectangle(cornerRadius: 2)
                             .fill(s.pct >= 1 ? c.accent : s.pct > 0 ? c.accentSoft : c.dim3)
-                            .frame(height: max(CGFloat(s.pct), 0.05) * 50)
+                            .frame(height: max(min(CGFloat(s.pct), 1.0), 0.05) * 50)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -368,6 +385,7 @@ struct LogSheet: View {
     private func logValue(_ value: Double, taskId: String, date: String, now: Date) {
         let entry = LogEntry(taskId: taskId, date: date, time: localTimeKey(now), value: value)
         modelContext.insert(entry)
+        try? modelContext.save()
         WidgetCenter.shared.reloadAllTimelines()
     }
 
