@@ -185,32 +185,29 @@ final class SyncEngine {
 
             let hdIds = remoteHDs.map(\.id)
 
-            // 4. Pull log_entries
+            // 4. Pull log_entries → HabitLogEntry (V2)
             if !hdIds.isEmpty {
                 let remoteLogs: [RemoteLogEntry] = try await client
                     .from("log_entries")
                     .select()
                     .in("habit_day_id", values: hdIds)
+                    .is("deleted_at", value: nil)
                     .execute()
                     .value
 
                 for rl in remoteLogs {
                     let rlId = rl.id
-                    let descriptor = FetchDescriptor<LogEntry>(predicate: #Predicate { $0.id == rlId })
+                    let descriptor = FetchDescriptor<HabitLogEntry>(predicate: #Predicate { $0.id == rlId })
                     let existing = (try? context.fetch(descriptor))?.first
                     if existing == nil {
-                        // Note: LogEntry V1 uses taskId/date. For new V2 log entries
-                        // we store the habit_day_id in taskId as a bridge field.
-                        // Full V2 LogEntry model will replace this in Phase 6.
-                        let entry = LogEntry(
+                        context.insert(HabitLogEntry(
                             id: rl.id,
-                            taskId: rl.habit_day_id,
-                            date: "",
-                            time: "",
+                            habitDayId: rl.habit_day_id,
                             value: rl.value,
-                            ts: rl.logged_at
-                        )
-                        context.insert(entry)
+                            loggedAt: rl.logged_at,
+                            time: rl.time,
+                            timezone: rl.timezone
+                        ))
                     }
                 }
             }
@@ -675,6 +672,15 @@ struct RemoteLogEntry: Decodable {
     let value: Double
     let logged_at: Double
     let timezone: String
+
+    /// Derive "HH:MM" from logged_at timestamp
+    var time: String {
+        let date = Date(timeIntervalSince1970: logged_at / 1000)
+        let cal = Calendar.current
+        let h = cal.component(.hour, from: date)
+        let m = cal.component(.minute, from: date)
+        return String(format: "%02d:%02d", h, m)
+    }
 }
 
 struct RemoteDaySummary: Decodable {

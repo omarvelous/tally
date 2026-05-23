@@ -60,6 +60,9 @@ struct HabitDetailView: View {
                     // 14-day trend
                     trendCard(sparkline: sparkline, now: now, c: c)
 
+                    // Day-by-day history
+                    dayHistory(habitDays: habitDays, resolved: resolved, c: c)
+
                     // Schedule info
                     scheduleCard(resolved: resolved, c: c)
 
@@ -75,10 +78,89 @@ struct HabitDetailView: View {
             .background(c.bg)
             .navigationTitle(resolved.habitName)
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: String.self) { habitDayId in
+                HabitDayLogView(habitDayId: habitDayId)
+            }
         } else {
             Text("Habit not found")
                 .foregroundStyle(TallyColors.resolve(colorScheme).dim)
         }
+    }
+
+    // MARK: - Day History
+
+    private func dayHistory(habitDays: [HabitDay], resolved: ResolvedUserHabit, c: TallyColors) -> some View {
+        let sorted = habitDays.sorted { $0.date > $1.date }
+        let recent = Array(sorted.prefix(30))
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Text("HISTORY · LAST \(recent.count) DAYS")
+                .font(TallyFont.label())
+                .textCase(.uppercase)
+                .tracking(1.2)
+                .foregroundStyle(c.dim)
+                .padding(.bottom, 4)
+
+            ForEach(recent, id: \.id) { hd in
+                NavigationLink(value: hd.id) {
+                    HStack(spacing: 10) {
+                        StatusPip(status: statusKindFor(hd.status))
+
+                        Text(formatDateLabel(hd.date))
+                            .font(TallyFont.heading(13, weight: .medium))
+                            .foregroundStyle(c.text)
+
+                        Spacer()
+
+                        // Value summary
+                        if resolved.type == .count || resolved.type == .timer {
+                            Text(verbatim: "\(Int(hd.sum.rounded())) / \(Int(hd.targetSnap ?? 0)) \(hd.unitSnap ?? "")")
+                                .font(TallyFont.mono(11))
+                                .foregroundStyle(c.dim)
+                        }
+
+                        Text(verbatim: "\(Int(hd.pct * 100))%")
+                            .font(TallyFont.mono(11, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(hd.status == "done" ? c.pos : hd.status == "partial" ? c.accent : c.dim)
+                            .frame(width: 36, alignment: .trailing)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(c.dim2)
+                    }
+                    .padding(.vertical, 10)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(c.rule).frame(height: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
+            if sorted.count > 30 {
+                Text("\(sorted.count - 30) MORE DAYS")
+                    .font(TallyFont.mono(10))
+                    .foregroundStyle(c.dim)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+            }
+        }
+    }
+
+    private func statusKindFor(_ status: String) -> TaskStatusKind {
+        switch status {
+        case "done": return .done
+        case "partial": return .partial
+        case "skipped": return .off
+        default: return .due
+        }
+    }
+
+    private func formatDateLabel(_ dateKey: String) -> String {
+        let parts = dateKey.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return dateKey }
+        let dow = dayOfWeek(Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) ?? Date())
+        return "\(dayNames[dow]) · \(monthNamesShort[parts[1] - 1]) \(parts[2])"
     }
 
     // MARK: - Trend Card
