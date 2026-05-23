@@ -21,6 +21,7 @@ struct TasksScreen: View {
     @State private var sortBy: SortOption = .rate
     @State private var viewFilter: ViewFilter = .active
     @State private var showHabitPicker = false
+    @State private var selectedUserHabitId: String?
 
     enum SortOption: String { case rate, name }
     enum ViewFilter: String { case active, archived }
@@ -121,14 +122,18 @@ struct TasksScreen: View {
                                     logCoordinator.open(hdId)
                                 } content: {
                                     habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: false, c: c)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { selectedUserHabitId = uh.id }
                                 }
                             } else {
                                 habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: isArchived, c: c)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { selectedUserHabitId = uh.id }
                                     .opacity(isArchived ? 0.6 : 1)
                             }
                         }
 
-                        Text(viewFilter == .active ? "SWIPE LEFT TO LOG" : "")
+                        Text(viewFilter == .active ? "TAP TO VIEW · SWIPE LEFT TO LOG" : "TAP TO REVIEW")
                             .font(TallyFont.mono(10))
                             .tracking(1.4)
                             .foregroundStyle(c.dim)
@@ -140,6 +145,9 @@ struct TasksScreen: View {
                 .padding(.bottom, 20)
             }
             .background(c.bg)
+            .navigationDestination(item: $selectedUserHabitId) { uhId in
+                HabitDetailView(userHabitId: uhId)
+            }
         }
         .sheet(isPresented: $showHabitPicker) {
             HabitPickerView()
