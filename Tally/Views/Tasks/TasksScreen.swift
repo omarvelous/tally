@@ -21,7 +21,6 @@ struct TasksScreen: View {
     @State private var sortBy: SortOption = .rate
     @State private var viewFilter: ViewFilter = .active
     @State private var showHabitPicker = false
-    @State private var selectedUserHabitId: String?
 
     enum SortOption: String { case rate, name }
     enum ViewFilter: String { case active, archived }
@@ -121,15 +120,17 @@ struct TasksScreen: View {
                                 SwipeableRow(pillLabel: "LOG →", pillColor: c.pos) {
                                     logCoordinator.open(hdId)
                                 } content: {
-                                    habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: false, c: c)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture { selectedUserHabitId = uh.id }
+                                    NavigationLink(value: UserHabitNavID(id: uh.id)) {
+                                        habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: false, c: c)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             } else {
-                                habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: isArchived, c: c)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { selectedUserHabitId = uh.id }
-                                    .opacity(isArchived ? 0.6 : 1)
+                                NavigationLink(value: UserHabitNavID(id: uh.id)) {
+                                    habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: isArchived, c: c)
+                                }
+                                .buttonStyle(.plain)
+                                .opacity(isArchived ? 0.6 : 1)
                             }
                         }
 
@@ -145,8 +146,8 @@ struct TasksScreen: View {
                 .padding(.bottom, 20)
             }
             .background(c.bg)
-            .navigationDestination(item: $selectedUserHabitId) { uhId in
-                HabitDetailView(userHabitId: uhId)
+            .navigationDestination(for: UserHabitNavID.self) { nav in
+                HabitDetailView(userHabitId: nav.id)
             }
             .navigationDestination(for: HabitDayNavID.self) { nav in
                 HabitDayLogView(habitDayId: nav.id)

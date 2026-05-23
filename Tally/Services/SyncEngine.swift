@@ -191,11 +191,10 @@ final class SyncEngine {
                     .from("log_entries")
                     .select()
                     .in("habit_day_id", values: hdIds)
-                    .is("deleted_at", value: nil)
                     .execute()
                     .value
 
-                for rl in remoteLogs {
+                for rl in remoteLogs where rl.deleted_at == nil {
                     let rlId = rl.id
                     let descriptor = FetchDescriptor<HabitLogEntry>(predicate: #Predicate { $0.id == rlId })
                     let existing = (try? context.fetch(descriptor))?.first
@@ -676,6 +675,8 @@ struct RemoteLogEntry: Decodable {
     let value: Double
     let logged_at: String    // ISO 8601 timestamptz from Supabase
     let timezone: String
+    let deleted_at: String?  // nil = active
+    let created_at: String
 
     var loggedAtMs: Double { parseISO(logged_at) }
 

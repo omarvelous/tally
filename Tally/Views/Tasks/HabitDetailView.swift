@@ -333,6 +333,10 @@ struct HabitDetailView: View {
 
 // MARK: - Navigation wrapper (avoids String collision with TasksScreen)
 
+struct UserHabitNavID: Hashable {
+    let id: String
+}
+
 struct HabitDayNavID: Hashable {
     let id: String
 }
