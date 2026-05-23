@@ -19,7 +19,7 @@ struct ContentView: View {
                 TodayScreen()
             }
 
-            Tab("Tasks", systemImage: "list.bullet", value: 1) {
+            Tab("Habits", systemImage: "list.bullet", value: 1) {
                 TasksScreen()
             }
 
@@ -40,11 +40,48 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Live Preview (connects to Supabase)
+
 #Preview {
-    ContentView()
-        .environment(NotificationScheduler())
-        .environment(MidnightObserver())
-        .environment(AuthService())
-        .environment(SyncEngine())
-        .modelContainer(for: TallySchemaV2.models, inMemory: true)
+    LivePreview()
+}
+
+/// Preview wrapper that uses the real persistent store, restores auth,
+/// and syncs from Supabase so previews show actual data.
+private struct LivePreview: View {
+    @State private var auth = AuthService()
+    @State private var sync = SyncEngine()
+    @State private var ready = false
+
+    var body: some View {
+        Group {
+            if ready {
+                ContentView()
+                    .environment(NotificationScheduler())
+                    .environment(MidnightObserver())
+                    .environment(auth)
+                    .environment(sync)
+            } else {
+                ProgressView("Syncing...")
+                    .task { await load() }
+            }
+        }
+        .modelContainer(previewContainer)
+    }
+
+    private var previewContainer: ModelContainer {
+        try! ModelContainerFactory.create()
+    }
+
+    @MainActor
+    private func load() async {
+        await auth.initialize()
+        if let userId = auth.userId {
+            let context = previewContainer.mainContext
+            await sync.pullCatalog(context: context)
+            await sync.pullUserData(context: context, profileId: userId)
+            HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
+        }
+        ready = true
+    }
 }
