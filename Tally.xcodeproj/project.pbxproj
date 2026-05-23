@@ -85,6 +85,7 @@
 				Models/Habit.swift,
 				Models/HabitDay.swift,
 				Models/LogEntry.swift,
+				Models/PendingSync.swift,
 				Models/Profile.swift,
 				Models/TallySchema.swift,
 				Models/TallySettings.swift,

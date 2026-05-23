@@ -288,44 +288,107 @@ final class SyncEngine {
         context.insert(schedule)
         try context.save()
 
-        // Push to Supabase
-        try await client
-            .from("user_habits")
-            .insert(PushUserHabit(
-                id: userHabit.id,
-                profile_id: profileId,
-                habit_id: habit.id,
-                sort_order: 0
-            ))
-            .execute()
-
-        try await client
-            .from("user_habit_schedules")
-            .insert(PushUserHabitSchedule(
-                id: schedule.id,
-                user_habit_id: userHabit.id,
-                target: target,
-                days: days,
-                times: times,
-                effective_from: today
-            ))
-            .execute()
-
-        // Generate today's habit_day locally + push to Supabase
+        // Generate today's habit_day locally if scheduled
         let dow = dayOfWeek(Date())
         let isScheduledToday = days.isEmpty || days.contains(dow)
+        var habitDay: HabitDay?
         if isScheduledToday {
-            let habitDay = HabitDay(
+            let hd = HabitDay(
                 userHabitId: userHabit.id,
                 scheduleId: schedule.id,
                 date: today,
                 targetSnap: target,
                 unitSnap: habit.unit
             )
-            context.insert(habitDay)
-            try context.save()
+            context.insert(hd)
+            habitDay = hd
+        }
 
-            try await pushHabitDay(habitDay)
+        // Enqueue all pushes
+        let encoder = JSONEncoder()
+
+        let uhDTO = PushUserHabit(id: userHabit.id, profile_id: profileId, habit_id: habit.id, sort_order: 0)
+        let schedDTO = PushUserHabitSchedule(id: schedule.id, user_habit_id: userHabit.id, target: target, days: days, times: times, effective_from: today)
+
+        let uhPending = PendingSync(table: "user_habits", payload: String(data: try encoder.encode(uhDTO), encoding: .utf8) ?? "")
+        let schedPending = PendingSync(table: "user_habit_schedules", payload: String(data: try encoder.encode(schedDTO), encoding: .utf8) ?? "")
+        context.insert(uhPending)
+        context.insert(schedPending)
+
+        var hdPending: PendingSync?
+        if let hd = habitDay {
+            let hdDTO = PushHabitDay(id: hd.id, user_habit_id: hd.userHabitId, schedule_id: hd.scheduleId, date: hd.date, target_snap: hd.targetSnap, unit_snap: hd.unitSnap, status: hd.status, pct: hd.pct, sum: hd.sum)
+            let p = PendingSync(table: "habit_days", payload: String(data: try encoder.encode(hdDTO), encoding: .utf8) ?? "")
+            context.insert(p)
+            hdPending = p
+        }
+
+        try context.save()
+
+        // Attempt immediate push — failures stay in queue for drainPendingSync
+        do {
+            try await client.from("user_habits").insert(uhDTO).execute()
+            context.delete(uhPending)
+        } catch { print("[SyncEngine] user_habit push queued: \(error.localizedDescription)") }
+
+        do {
+            try await client.from("user_habit_schedules").insert(schedDTO).execute()
+            context.delete(schedPending)
+        } catch { print("[SyncEngine] schedule push queued: \(error.localizedDescription)") }
+
+        if let hd = habitDay, let p = hdPending {
+            do {
+                try await pushHabitDay(hd)
+                context.delete(p)
+            } catch { print("[SyncEngine] habit_day push queued: \(error.localizedDescription)") }
+        }
+
+        try context.save()
+    }
+
+    // MARK: - Pending Sync Queue
+
+    /// Drain all pending sync items. Call on app launch and on connectivity restore.
+    @MainActor
+    func drainPendingSync(context: ModelContext) async {
+        let pending = (try? context.fetch(
+            FetchDescriptor<PendingSync>(sortBy: [SortDescriptor(\.createdAt)])
+        )) ?? []
+
+        guard !pending.isEmpty else { return }
+        print("[SyncEngine] draining \(pending.count) pending sync items")
+
+        for item in pending {
+            guard let data = item.payload.data(using: .utf8) else {
+                context.delete(item)
+                continue
+            }
+
+            do {
+                switch item.table {
+                case "log_entries":
+                    let dto = try JSONDecoder().decode(PushLogEntry.self, from: data)
+                    try await client.from("log_entries").insert(dto).execute()
+                case "user_habits":
+                    let dto = try JSONDecoder().decode(PushUserHabit.self, from: data)
+                    try await client.from("user_habits").insert(dto).execute()
+                case "user_habit_schedules":
+                    let dto = try JSONDecoder().decode(PushUserHabitSchedule.self, from: data)
+                    try await client.from("user_habit_schedules").insert(dto).execute()
+                case "habit_days":
+                    let dto = try JSONDecoder().decode(PushHabitDay.self, from: data)
+                    try await client.from("habit_days").insert(dto).execute()
+                default:
+                    print("[SyncEngine] unknown table: \(item.table)")
+                }
+                // Success — remove from queue
+                context.delete(item)
+                try context.save()
+            } catch {
+                item.retryCount += 1
+                print("[SyncEngine] retry \(item.retryCount) failed for \(item.table): \(error.localizedDescription)")
+                // Leave in queue for next drain cycle
+            }
         }
     }
 
@@ -410,17 +473,31 @@ final class SyncEngine {
 
         try context.save()
 
-        // 3. Push log_entry to Supabase (trigger will update server-side)
+        // 3. Enqueue + attempt push to Supabase
         let logId = UUID().uuidString
-        try await client
-            .from("log_entries")
-            .insert(PushLogEntry(
-                id: logId,
-                habit_day_id: habitDayId,
-                value: value,
-                timezone: timezone
-            ))
-            .execute()
+        let pushDTO = PushLogEntry(
+            id: logId,
+            habit_day_id: habitDayId,
+            value: value,
+            timezone: timezone
+        )
+
+        let payload = try JSONEncoder().encode(pushDTO)
+        let pending = PendingSync(
+            table: "log_entries",
+            payload: String(data: payload, encoding: .utf8) ?? ""
+        )
+        context.insert(pending)
+        try context.save()
+
+        // Attempt immediate push — if it fails, drainPendingSync will retry
+        do {
+            try await client.from("log_entries").insert(pushDTO).execute()
+            context.delete(pending)
+            try context.save()
+        } catch {
+            print("[SyncEngine] log push queued for retry: \(error.localizedDescription)")
+        }
     }
 
     /// Recompute the local DaySummary for a given date after a HabitDay change.
@@ -607,14 +684,14 @@ struct RemoteDaySummary: Decodable {
 
 // MARK: - Push DTOs (Encodable — for pushing to Supabase)
 
-struct PushUserHabit: Encodable {
+struct PushUserHabit: Codable {
     let id: String
     let profile_id: String
     let habit_id: String
     let sort_order: Int
 }
 
-struct PushUserHabitSchedule: Encodable {
+struct PushUserHabitSchedule: Codable {
     let id: String
     let user_habit_id: String
     let target: Double?
@@ -623,14 +700,14 @@ struct PushUserHabitSchedule: Encodable {
     let effective_from: String
 }
 
-struct PushLogEntry: Encodable {
+struct PushLogEntry: Codable {
     let id: String
     let habit_day_id: String
     let value: Double
     let timezone: String
 }
 
-struct PushHabitDay: Encodable {
+struct PushHabitDay: Codable {
     let id: String
     let user_habit_id: String
     let schedule_id: String

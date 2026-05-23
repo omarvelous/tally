@@ -52,6 +52,9 @@ struct TallyApp: App {
     private func onSignedIn() async {
         let context = sharedModelContainer.mainContext
 
+        // Drain any pending sync items from previous sessions (offline writes)
+        await syncEngine.drainPendingSync(context: context)
+
         // Pull global catalog + user data from Supabase
         await syncEngine.pullCatalog(context: context)
         if let userId = authService.userId {
