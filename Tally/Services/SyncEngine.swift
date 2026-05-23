@@ -187,27 +187,33 @@ final class SyncEngine {
 
             // 4. Pull log_entries → HabitLogEntry (V2)
             if !hdIds.isEmpty {
-                let remoteLogs: [RemoteLogEntry] = try await client
-                    .from("log_entries")
-                    .select()
-                    .in("habit_day_id", values: hdIds)
-                    .execute()
-                    .value
+                do {
+                    let remoteLogs: [RemoteLogEntry] = try await client
+                        .from("log_entries")
+                        .select()
+                        .in("habit_day_id", values: hdIds)
+                        .execute()
+                        .value
 
-                for rl in remoteLogs where rl.deleted_at == nil {
-                    let rlId = rl.id
-                    let descriptor = FetchDescriptor<HabitLogEntry>(predicate: #Predicate { $0.id == rlId })
-                    let existing = (try? context.fetch(descriptor))?.first
-                    if existing == nil {
-                        context.insert(HabitLogEntry(
-                            id: rl.id,
-                            habitDayId: rl.habit_day_id,
-                            value: rl.value,
-                            loggedAt: rl.loggedAtMs,
-                            time: rl.time,
-                            timezone: rl.timezone
-                        ))
+                    print("[SyncEngine] pulled \(remoteLogs.count) log entries")
+
+                    for rl in remoteLogs where rl.deleted_at == nil {
+                        let rlId = rl.id
+                        let descriptor = FetchDescriptor<HabitLogEntry>(predicate: #Predicate { $0.id == rlId })
+                        let existing = (try? context.fetch(descriptor))?.first
+                        if existing == nil {
+                            context.insert(HabitLogEntry(
+                                id: rl.id,
+                                habitDayId: rl.habit_day_id,
+                                value: rl.value,
+                                loggedAt: rl.loggedAtMs,
+                                time: rl.time,
+                                timezone: rl.timezone
+                            ))
+                        }
                     }
+                } catch {
+                    print("[SyncEngine] log_entries pull FAILED: \(error)")
                 }
             }
 
@@ -672,11 +678,18 @@ struct RemoteHabitDay: Decodable {
 struct RemoteLogEntry: Decodable {
     let id: String
     let habit_day_id: String
-    let value: Double
     let logged_at: String    // ISO 8601 timestamptz from Supabase
     let timezone: String
     let deleted_at: String?  // nil = active
     let created_at: String
+    private let _value: FlexibleDouble
+
+    var value: Double { _value.value }
+
+    enum CodingKeys: String, CodingKey {
+        case id, habit_day_id, logged_at, timezone, deleted_at, created_at
+        case _value = "value"
+    }
 
     var loggedAtMs: Double { parseISO(logged_at) }
 
@@ -702,19 +715,48 @@ struct RemoteDaySummary: Decodable {
     var updatedAtMs: Double { parseISO(updated_at) }
 }
 
+// MARK: - Flexible number decoder (Postgres numeric → string or number)
+
+struct FlexibleDouble: Decodable {
+    let value: Double
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let d = try? container.decode(Double.self) {
+            value = d
+        } else if let s = try? container.decode(String.self), let d = Double(s) {
+            value = d
+        } else {
+            value = 0
+        }
+    }
+}
+
 // MARK: - ISO 8601 timestamp parser
 
 private func parseISO(_ s: String) -> Double {
+    // Supabase returns timestamps like "2026-05-23 15:09:38.108295+00"
+    // ISO8601 expects "2026-05-23T15:09:38.108295+00:00"
+    // Normalize the format before parsing
+    var normalized = s
+        .replacingOccurrences(of: " ", with: "T", range: s.range(of: " "))
+
+    // Fix timezone: "+00" → "+00:00"
+    if let plusRange = normalized.range(of: "+", options: .backwards),
+       normalized.distance(from: plusRange.lowerBound, to: normalized.endIndex) == 3 {
+        normalized += ":00"
+    }
+
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let date = formatter.date(from: s) {
+    if let date = formatter.date(from: normalized) {
         return date.timeIntervalSince1970 * 1000
     }
     // Fallback without fractional seconds
     formatter.formatOptions = [.withInternetDateTime]
-    if let date = formatter.date(from: s) {
+    if let date = formatter.date(from: normalized) {
         return date.timeIntervalSince1970 * 1000
     }
+    print("[SyncEngine] parseISO failed for: \(s)")
     return Date().timeIntervalSince1970 * 1000
 }
 
