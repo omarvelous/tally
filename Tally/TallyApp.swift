@@ -14,6 +14,8 @@ struct TallyApp: App {
     @State private var midnightObserver = MidnightObserver()
     @State private var authService = AuthService()
     @State private var syncEngine = SyncEngine()
+    @State private var needsOnboarding = false
+    @State private var catalogReady = false
 
     var sharedModelContainer: ModelContainer = {
         do {
@@ -29,13 +31,21 @@ struct TallyApp: App {
                 if authService.isLoading {
                     ProgressView()
                 } else if authService.isSignedIn {
-                    ContentView()
-                        .environment(notificationScheduler)
-                        .environment(midnightObserver)
-                        .environment(syncEngine)
-                        .task {
-                            await onSignedIn()
+                    if !catalogReady {
+                        ProgressView("Loading habits...")
+                            .environment(syncEngine)
+                            .task { await onSignedIn() }
+                    } else if needsOnboarding {
+                        OnboardingScreen {
+                            Task { await onOnboardingComplete() }
                         }
+                        .environment(syncEngine)
+                    } else {
+                        ContentView()
+                            .environment(notificationScheduler)
+                            .environment(midnightObserver)
+                            .environment(syncEngine)
+                    }
                 } else {
                     SignInView()
                 }
@@ -60,14 +70,36 @@ struct TallyApp: App {
         if let userId = authService.userId {
             await syncEngine.pullUserData(context: context, profileId: userId)
 
-            // Generate today's habit_days locally (idempotent) + push to Supabase
+            // Check if user has any habits — if not, show onboarding
+            let pid = userId
+            let userHabits = (try? context.fetch(
+                FetchDescriptor<UserHabit>(predicate: #Predicate { $0.profileId == pid })
+            )) ?? []
+
+            if userHabits.isEmpty {
+                needsOnboarding = true
+            } else {
+                // Generate today's habit_days locally (idempotent) + push to Supabase
+                HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
+                await syncEngine.pushHabitDaysForDate(Date(), profileId: userId, context: context)
+            }
+        }
+
+        catalogReady = true
+
+        // Schedule notifications
+        await notificationScheduler.requestPermission()
+        scheduleNotifications()
+    }
+
+    @MainActor
+    private func onOnboardingComplete() async {
+        let context = sharedModelContainer.mainContext
+        if let userId = authService.userId {
             HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
             await syncEngine.pushHabitDaysForDate(Date(), profileId: userId, context: context)
         }
-
-        // Schedule notifications (still uses V1 tasks for now)
-        await notificationScheduler.requestPermission()
-        scheduleNotifications()
+        withAnimation { needsOnboarding = false }
     }
 
     @MainActor
