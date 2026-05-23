@@ -310,6 +310,65 @@ final class SyncEngine {
                 effective_from: today
             ))
             .execute()
+
+        // Generate today's habit_day locally + push to Supabase
+        let dow = dayOfWeek(Date())
+        let isScheduledToday = days.isEmpty || days.contains(dow)
+        if isScheduledToday {
+            let habitDay = HabitDay(
+                userHabitId: userHabit.id,
+                scheduleId: schedule.id,
+                date: today,
+                targetSnap: target,
+                unitSnap: habit.unit
+            )
+            context.insert(habitDay)
+            try context.save()
+
+            try await pushHabitDay(habitDay)
+        }
+    }
+
+    /// Push a single HabitDay to Supabase
+    func pushHabitDay(_ hd: HabitDay) async throws {
+        try await client
+            .from("habit_days")
+            .insert(PushHabitDay(
+                id: hd.id,
+                user_habit_id: hd.userHabitId,
+                schedule_id: hd.scheduleId,
+                date: hd.date,
+                target_snap: hd.targetSnap,
+                unit_snap: hd.unitSnap,
+                status: hd.status,
+                pct: hd.pct,
+                sum: hd.sum
+            ))
+            .execute()
+    }
+
+    /// Push all locally-generated habit_days for a date to Supabase
+    @MainActor
+    func pushHabitDaysForDate(_ date: Date, profileId: String, context: ModelContext) async {
+        let dateKey = localDateKey(date)
+        let pid = profileId
+
+        let userHabits = (try? context.fetch(
+            FetchDescriptor<UserHabit>(predicate: #Predicate { $0.profileId == pid })
+        )) ?? []
+        let uhIds = Set(userHabits.map(\.id))
+
+        let allHDs = (try? context.fetch(FetchDescriptor<HabitDay>())) ?? []
+        let todayHDs = allHDs.filter { $0.date == dateKey && uhIds.contains($0.userHabitId) }
+
+        for hd in todayHDs {
+            do {
+                try await pushHabitDay(hd)
+            } catch {
+                // Might already exist on server — that's fine (unique constraint)
+                print("[SyncEngine] pushHabitDay failed for \(hd.id): \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Log a completion: update local HabitDay, push log_entry to Supabase
@@ -569,4 +628,16 @@ struct PushLogEntry: Encodable {
     let habit_day_id: String
     let value: Double
     let timezone: String
+}
+
+struct PushHabitDay: Encodable {
+    let id: String
+    let user_habit_id: String
+    let schedule_id: String
+    let date: String
+    let target_snap: Double?
+    let unit_snap: String?
+    let status: String
+    let pct: Double
+    let sum: Double
 }

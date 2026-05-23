@@ -354,12 +354,16 @@ struct LogSheet: View {
 
     private func logValue(_ value: Double, resolved: ResolvedHabitDay) {
         Task {
-            try? await syncEngine.logCompletion(
-                habitDayId: resolved.habitDayId,
-                value: value,
-                timezone: TimeZone.current.identifier,
-                context: modelContext
-            )
+            do {
+                try await syncEngine.logCompletion(
+                    habitDayId: resolved.habitDayId,
+                    value: value,
+                    timezone: TimeZone.current.identifier,
+                    context: modelContext
+                )
+            } catch {
+                print("[LogSheet] push to Supabase failed: \(error)")
+            }
             WidgetCenter.shared.reloadAllTimelines()
         }
     }

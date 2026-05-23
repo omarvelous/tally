@@ -57,8 +57,9 @@ struct TallyApp: App {
         if let userId = authService.userId {
             await syncEngine.pullUserData(context: context, profileId: userId)
 
-            // Generate today's habit_days locally (idempotent)
+            // Generate today's habit_days locally (idempotent) + push to Supabase
             HabitDayGenerator.generateForDate(Date(), profileId: userId, context: context)
+            await syncEngine.pushHabitDaysForDate(Date(), profileId: userId, context: context)
         }
 
         // Schedule notifications (still uses V1 tasks for now)
