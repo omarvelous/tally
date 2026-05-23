@@ -12,6 +12,7 @@ import SwiftData
 struct TallyApp: App {
     @State private var notificationScheduler = NotificationScheduler()
     @State private var midnightObserver = MidnightObserver()
+    @State private var authService = AuthService()
 
     var sharedModelContainer: ModelContainer = {
         do {
@@ -23,13 +24,25 @@ struct TallyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(notificationScheduler)
-                .environment(midnightObserver)
-                .task {
-                    await notificationScheduler.requestPermission()
-                    scheduleNotifications()
+            Group {
+                if authService.isLoading {
+                    ProgressView()
+                } else if authService.isSignedIn {
+                    ContentView()
+                        .environment(notificationScheduler)
+                        .environment(midnightObserver)
+                        .task {
+                            await notificationScheduler.requestPermission()
+                            scheduleNotifications()
+                        }
+                } else {
+                    SignInView()
                 }
+            }
+            .environment(authService)
+            .task {
+                await authService.initialize()
+            }
         }
         .modelContainer(sharedModelContainer)
     }
