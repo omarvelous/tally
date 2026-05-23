@@ -468,13 +468,21 @@ final class SyncEngine {
             habitDay.status = "pending"
         }
 
-        // 2. Update local DaySummary
+        // 2. Store local log entry
+        let logId = UUID().uuidString
+        let logEntry = HabitLogEntry(
+            id: logId,
+            habitDayId: habitDayId,
+            value: value
+        )
+        context.insert(logEntry)
+
+        // 3. Update local DaySummary
         recomputeLocalDaySummary(date: habitDay.date, userHabitId: habitDay.userHabitId, context: context)
 
         try context.save()
 
-        // 3. Enqueue + attempt push to Supabase
-        let logId = UUID().uuidString
+        // 4. Enqueue + attempt push to Supabase
         let pushDTO = PushLogEntry(
             id: logId,
             habit_day_id: habitDayId,
