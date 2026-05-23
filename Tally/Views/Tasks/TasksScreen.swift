@@ -120,15 +120,21 @@ struct TasksScreen: View {
                                 SwipeableRow(pillLabel: "LOG →", pillColor: c.pos) {
                                     logCoordinator.open(hdId)
                                 } content: {
-                                    habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: false, c: c)
+                                    NavigationLink(value: UserHabitNavID(id: uh.id)) {
+                                        habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: false, c: c)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             } else {
-                                habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: isArchived, c: c)
-                                    .opacity(isArchived ? 0.6 : 1)
+                                NavigationLink(value: UserHabitNavID(id: uh.id)) {
+                                    habitRow(habit: habit, sched: sched, sparkline: sparkline, rate: rate, isArchived: isArchived, c: c)
+                                }
+                                .buttonStyle(.plain)
+                                .opacity(isArchived ? 0.6 : 1)
                             }
                         }
 
-                        Text(viewFilter == .active ? "SWIPE LEFT TO LOG" : "")
+                        Text(viewFilter == .active ? "TAP TO VIEW · SWIPE LEFT TO LOG" : "TAP TO REVIEW")
                             .font(TallyFont.mono(10))
                             .tracking(1.4)
                             .foregroundStyle(c.dim)
@@ -140,6 +146,12 @@ struct TasksScreen: View {
                 .padding(.bottom, 20)
             }
             .background(c.bg)
+            .navigationDestination(for: UserHabitNavID.self) { nav in
+                HabitDetailView(userHabitId: nav.id)
+            }
+            .navigationDestination(for: HabitDayNavID.self) { nav in
+                HabitDayLogView(habitDayId: nav.id)
+            }
         }
         .sheet(isPresented: $showHabitPicker) {
             HabitPickerView()

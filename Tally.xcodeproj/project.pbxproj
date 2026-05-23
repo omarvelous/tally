@@ -82,6 +82,7 @@
 				Models/DaySummary.swift,
 				Models/Habit.swift,
 				Models/HabitDay.swift,
+				Models/HabitLogEntry.swift,
 				Models/LogEntry.swift,
 				Models/PendingSync.swift,
 				Models/Profile.swift,

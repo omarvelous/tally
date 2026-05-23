@@ -16,6 +16,7 @@ enum TallySchemaV2: VersionedSchema {
             Category.self, Habit.self, UserHabit.self,
             UserHabitSchedule.self, HabitDay.self, DaySummary.self,
             Profile.self, UserPreferences.self, PendingSync.self,
+            HabitLogEntry.self,
         ]
     }
 }

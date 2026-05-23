@@ -17,13 +17,20 @@ struct LogSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SyncEngine.self) private var syncEngine
 
+    @Query private var allLogEntries: [HabitLogEntry]
     @State private var stagedValue: String = ""
     @State private var usingPlaceholder: Bool = true
+    @State private var deleteTarget: HabitLogEntry?
 
     var body: some View {
         let c = TallyColors.resolve(colorScheme)
 
         if let resolved = resolveHabitDay(id: habitDayId, context: modelContext) {
+            let hdId = habitDayId
+            let todayEntries = allLogEntries
+                .filter { $0.habitDayId == hdId && !$0.deleted }
+                .sorted { $0.loggedAt > $1.loggedAt }
+
             VStack(spacing: 0) {
                 // Static header
                 VStack(alignment: .leading, spacing: 16) {
@@ -53,7 +60,16 @@ struct LogSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 12)
 
-                Spacer()
+                // Scrollable entries list
+                if !todayEntries.isEmpty {
+                    ScrollView {
+                        entriesList(resolved: resolved, entries: todayEntries, c: c)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 16)
+                    }
+                } else {
+                    Spacer()
+                }
 
                 // Pinned footer — log controls
                 Divider()
@@ -63,6 +79,18 @@ struct LogSheet: View {
                     .background(c.bg)
             }
             .background(c.bg)
+            .alert(
+                "Delete this entry?",
+                isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
+            ) {
+                Button("Cancel", role: .cancel) { deleteTarget = nil }
+                Button("Delete", role: .destructive) {
+                    if let entry = deleteTarget {
+                        softDeleteEntry(entry, resolved: resolved)
+                        deleteTarget = nil
+                    }
+                }
+            }
         } else {
             Text("Habit not found")
                 .foregroundStyle(TallyColors.resolve(colorScheme).dim)
@@ -348,6 +376,103 @@ struct LogSheet: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    // MARK: - Entries list
+
+    private func entriesList(resolved: ResolvedHabitDay, entries: [HabitLogEntry], c: TallyColors) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            let countLabel = resolved.type == .count ? "SETS" : (entries.count == 1 ? "ENTRY" : "ENTRIES")
+            Text(verbatim: "TODAY · \(entries.count) \(countLabel)")
+                .font(TallyFont.label())
+                .textCase(.uppercase)
+                .tracking(1.2)
+                .foregroundStyle(c.dim)
+                .padding(.bottom, 4)
+
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                SwipeableRow(pillLabel: "DELETE", pillColor: c.neg) {
+                    deleteTarget = entry
+                } content: {
+                    HStack(spacing: 8) {
+                        Text(verbatim: String(format: "%02d", entries.count - index))
+                            .font(TallyFont.mono(11))
+                            .foregroundStyle(c.dim)
+                            .frame(width: 24)
+                        Text(verbatim: entry.time)
+                            .font(TallyFont.mono(11))
+                            .foregroundStyle(c.dim)
+                        Spacer()
+                        Text(verbatim: entryValueText(resolved: resolved, entry: entry))
+                            .font(TallyFont.mono(14, weight: .semibold))
+                            .foregroundStyle(c.text)
+                        Text(verbatim: (resolved.unitSnap ?? "").uppercased())
+                            .font(TallyFont.mono(10))
+                            .foregroundStyle(c.dim)
+                            .frame(width: 36, alignment: .trailing)
+                    }
+                    .padding(.vertical, 10)
+                }
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(c.rule).frame(height: 1)
+                }
+            }
+
+            // Total row for count/timer
+            if resolved.type == .count || resolved.type == .timer {
+                HStack(spacing: 8) {
+                    Text("Σ")
+                        .font(TallyFont.mono(11, weight: .semibold))
+                        .frame(width: 24)
+                    Text("TOTAL")
+                        .font(TallyFont.mono(11))
+                        .foregroundStyle(c.dim)
+                    Spacer()
+                    Text(verbatim: "\(Int(resolved.sum.rounded()))")
+                        .font(TallyFont.mono(15, weight: .semibold))
+                        .foregroundStyle(resolved.isDone ? c.pos : c.accent)
+                    Text(verbatim: (resolved.unitSnap ?? "").uppercased())
+                        .font(TallyFont.mono(10))
+                        .foregroundStyle(c.dim)
+                        .frame(width: 36, alignment: .trailing)
+                }
+                .padding(.vertical, 12)
+            }
+        }
+    }
+
+    private func entryValueText(resolved: ResolvedHabitDay, entry: HabitLogEntry) -> String {
+        switch resolved.type {
+        case .check, .yesno: return "✓"
+        case .numeric: return String(format: "%.1f", entry.value)
+        case .count, .timer: return "+\(Int(entry.value))"
+        }
+    }
+
+    private func softDeleteEntry(_ entry: HabitLogEntry, resolved: ResolvedHabitDay) {
+        entry.deleted = true
+
+        // Recompute HabitDay from remaining entries
+        let hdId = habitDayId
+        let remaining = allLogEntries.filter { $0.habitDayId == hdId && !$0.deleted }
+        let newSum = remaining.reduce(0.0) { $0 + $1.value }
+
+        let descriptor = FetchDescriptor<HabitDay>(predicate: #Predicate { $0.id == hdId })
+        if let habitDay = (try? modelContext.fetch(descriptor))?.first {
+            habitDay.sum = newSum
+            let target = habitDay.targetSnap
+            if target == nil || target == 0 {
+                habitDay.pct = newSum >= 1 ? 1.0 : 0.0
+            } else {
+                habitDay.pct = newSum / target!
+            }
+            if habitDay.pct >= 1.0 { habitDay.status = "done" }
+            else if habitDay.pct > 0 { habitDay.status = "partial" }
+            else { habitDay.status = "pending" }
+        }
+
+        try? modelContext.save()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     // MARK: - Helpers

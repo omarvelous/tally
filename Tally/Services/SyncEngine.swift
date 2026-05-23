@@ -111,16 +111,16 @@ final class SyncEngine {
                 let existing = (try? context.fetch(descriptor))?.first
                 if let existing {
                     existing.sortOrder = ruh.sort_order
-                    existing.archivedAt = ruh.archived_at
-                    existing.updatedAt = ruh.updated_at
+                    existing.archivedAt = ruh.archivedAtMs
+                    existing.updatedAt = ruh.updatedAtMs
                 } else {
                     context.insert(UserHabit(
                         id: ruh.id,
                         profileId: ruh.profile_id,
                         habitId: ruh.habit_id,
                         sortOrder: ruh.sort_order,
-                        archivedAt: ruh.archived_at,
-                        createdAt: ruh.created_at
+                        archivedAt: ruh.archivedAtMs,
+                        createdAt: ruh.createdAtMs
                     ))
                 }
             }
@@ -185,33 +185,35 @@ final class SyncEngine {
 
             let hdIds = remoteHDs.map(\.id)
 
-            // 4. Pull log_entries
+            // 4. Pull log_entries → HabitLogEntry (V2)
             if !hdIds.isEmpty {
-                let remoteLogs: [RemoteLogEntry] = try await client
-                    .from("log_entries")
-                    .select()
-                    .in("habit_day_id", values: hdIds)
-                    .execute()
-                    .value
+                do {
+                    let remoteLogs: [RemoteLogEntry] = try await client
+                        .from("log_entries")
+                        .select()
+                        .in("habit_day_id", values: hdIds)
+                        .execute()
+                        .value
 
-                for rl in remoteLogs {
-                    let rlId = rl.id
-                    let descriptor = FetchDescriptor<LogEntry>(predicate: #Predicate { $0.id == rlId })
-                    let existing = (try? context.fetch(descriptor))?.first
-                    if existing == nil {
-                        // Note: LogEntry V1 uses taskId/date. For new V2 log entries
-                        // we store the habit_day_id in taskId as a bridge field.
-                        // Full V2 LogEntry model will replace this in Phase 6.
-                        let entry = LogEntry(
-                            id: rl.id,
-                            taskId: rl.habit_day_id,
-                            date: "",
-                            time: "",
-                            value: rl.value,
-                            ts: rl.logged_at
-                        )
-                        context.insert(entry)
+                    print("[SyncEngine] pulled \(remoteLogs.count) log entries")
+
+                    for rl in remoteLogs where rl.deleted_at == nil {
+                        let rlId = rl.id
+                        let descriptor = FetchDescriptor<HabitLogEntry>(predicate: #Predicate { $0.id == rlId })
+                        let existing = (try? context.fetch(descriptor))?.first
+                        if existing == nil {
+                            context.insert(HabitLogEntry(
+                                id: rl.id,
+                                habitDayId: rl.habit_day_id,
+                                value: rl.value,
+                                loggedAt: rl.loggedAtMs,
+                                time: rl.time,
+                                timezone: rl.timezone
+                            ))
+                        }
                     }
+                } catch {
+                    print("[SyncEngine] log_entries pull FAILED: \(error)")
                 }
             }
 
@@ -234,7 +236,7 @@ final class SyncEngine {
                     existing.overdue = rs.overdue
                     existing.pct = rs.pct
                     existing.streakDay = rs.streak_day
-                    existing.updatedAt = rs.updated_at
+                    existing.updatedAt = rs.updatedAtMs
                 } else {
                     context.insert(DaySummary(
                         id: rs.id,
@@ -468,13 +470,21 @@ final class SyncEngine {
             habitDay.status = "pending"
         }
 
-        // 2. Update local DaySummary
+        // 2. Store local log entry
+        let logId = UUID().uuidString
+        let logEntry = HabitLogEntry(
+            id: logId,
+            habitDayId: habitDayId,
+            value: value
+        )
+        context.insert(logEntry)
+
+        // 3. Update local DaySummary
         recomputeLocalDaySummary(date: habitDay.date, userHabitId: habitDay.userHabitId, context: context)
 
         try context.save()
 
-        // 3. Enqueue + attempt push to Supabase
-        let logId = UUID().uuidString
+        // 4. Enqueue + attempt push to Supabase
         let pushDTO = PushLogEntry(
             id: logId,
             habit_day_id: habitDayId,
@@ -634,9 +644,13 @@ struct RemoteUserHabit: Decodable {
     let profile_id: String
     let habit_id: String
     let sort_order: Int
-    let archived_at: Double?
-    let created_at: Double
-    let updated_at: Double
+    let archived_at: String?   // ISO 8601 timestamptz, nil = active
+    let created_at: String
+    let updated_at: String
+
+    var archivedAtMs: Double? { archived_at.map { parseISO($0) } }
+    var createdAtMs: Double { parseISO(created_at) }
+    var updatedAtMs: Double { parseISO(updated_at) }
 }
 
 struct RemoteUserHabitSchedule: Decodable {
@@ -664,9 +678,26 @@ struct RemoteHabitDay: Decodable {
 struct RemoteLogEntry: Decodable {
     let id: String
     let habit_day_id: String
-    let value: Double
-    let logged_at: Double
+    let logged_at: String    // ISO 8601 timestamptz from Supabase
     let timezone: String
+    let deleted_at: String?  // nil = active
+    let created_at: String
+    private let _value: FlexibleDouble
+
+    var value: Double { _value.value }
+
+    enum CodingKeys: String, CodingKey {
+        case id, habit_day_id, logged_at, timezone, deleted_at, created_at
+        case _value = "value"
+    }
+
+    var loggedAtMs: Double { parseISO(logged_at) }
+
+    /// Derive "HH:MM" from logged_at timestamp
+    var time: String {
+        let date = Date(timeIntervalSince1970: loggedAtMs / 1000)
+        return localTimeKey(date)
+    }
 }
 
 struct RemoteDaySummary: Decodable {
@@ -679,7 +710,54 @@ struct RemoteDaySummary: Decodable {
     let overdue: Int
     let pct: Double
     let streak_day: Bool
-    let updated_at: Double
+    let updated_at: String
+
+    var updatedAtMs: Double { parseISO(updated_at) }
+}
+
+// MARK: - Flexible number decoder (Postgres numeric → string or number)
+
+struct FlexibleDouble: Decodable {
+    let value: Double
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let d = try? container.decode(Double.self) {
+            value = d
+        } else if let s = try? container.decode(String.self), let d = Double(s) {
+            value = d
+        } else {
+            value = 0
+        }
+    }
+}
+
+// MARK: - ISO 8601 timestamp parser
+
+private func parseISO(_ s: String) -> Double {
+    // Supabase returns timestamps like "2026-05-23 15:09:38.108295+00"
+    // ISO8601 expects "2026-05-23T15:09:38.108295+00:00"
+    // Normalize the format before parsing
+    var normalized = s
+        .replacingOccurrences(of: " ", with: "T", range: s.range(of: " "))
+
+    // Fix timezone: "+00" → "+00:00"
+    if let plusRange = normalized.range(of: "+", options: .backwards),
+       normalized.distance(from: plusRange.lowerBound, to: normalized.endIndex) == 3 {
+        normalized += ":00"
+    }
+
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: normalized) {
+        return date.timeIntervalSince1970 * 1000
+    }
+    // Fallback without fractional seconds
+    formatter.formatOptions = [.withInternetDateTime]
+    if let date = formatter.date(from: normalized) {
+        return date.timeIntervalSince1970 * 1000
+    }
+    print("[SyncEngine] parseISO failed for: \(s)")
+    return Date().timeIntervalSince1970 * 1000
 }
 
 // MARK: - Push DTOs (Encodable — for pushing to Supabase)
