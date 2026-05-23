@@ -3,7 +3,7 @@
 //  TallyWidgets
 //
 //  Streak widget: shows current streak count + day completion %.
-//  Supports lock screen (accessory) and home screen (small) sizes.
+//  V2: reads from HabitDay + DaySummary (materialized data).
 
 import WidgetKit
 import SwiftUI
@@ -27,13 +27,11 @@ struct TallyTimelineProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TallyEntry) -> Void) {
-        let entry = computeEntry()
-        completion(entry)
+        completion(computeEntry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TallyEntry>) -> Void) {
         let entry = computeEntry()
-        // Refresh at next midnight
         let midnight = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: .now)!)
         let timeline = Timeline(entries: [entry], policy: .after(midnight))
         completion(timeline)
@@ -43,22 +41,31 @@ struct TallyTimelineProvider: TimelineProvider {
         do {
             let container = try ModelContainerFactory.create()
             let context = ModelContext(container)
-
-            let tasks = try context.fetch(FetchDescriptor<TallyTask>())
-                .filter { !$0.archived }
-            let entries = try context.fetch(FetchDescriptor<LogEntry>())
             let now = Date()
+            let todayKey = localDateKey(now)
 
-            let day = dayCompletionFor(date: now, tasks: tasks, entries: entries, now: now)
-            let streak = streakFor(tasks: tasks, entries: entries, now: now)
+            // Read today's habit_days
+            let allHabitDays = try context.fetch(FetchDescriptor<HabitDay>())
+            let todayHDs = allHabitDays.filter { $0.date == todayKey }
 
-            return TallyEntry(
-                date: now,
-                streakCount: streak.current,
-                dayPct: Int((day.pct * 100).rounded()),
-                done: day.done,
-                total: day.total
-            )
+            let total = todayHDs.count
+            let done = todayHDs.filter { $0.status == "done" }.count
+            let dayPct = total > 0 ? Int((Double(done) / Double(total) * 100).rounded()) : 0
+
+            // Compute streak from day_summaries
+            let allSummaries = try context.fetch(FetchDescriptor<DaySummary>())
+            let byDate = Dictionary(allSummaries.map { ($0.date, $0) }, uniquingKeysWith: { a, _ in a })
+
+            var streak = 0
+            if let today = byDate[todayKey], today.streakDay { streak = 1 }
+            for i in 1...60 {
+                let key = localDateKey(addDays(now, -i))
+                guard let summary = byDate[key] else { break }
+                if summary.total == 0 { continue }
+                if summary.streakDay { streak += 1 } else { break }
+            }
+
+            return TallyEntry(date: now, streakCount: streak, dayPct: dayPct, done: done, total: total)
         } catch {
             return TallyEntry(date: .now, streakCount: 0, dayPct: 0, done: 0, total: 0)
         }
@@ -97,7 +104,6 @@ struct StreakWidgetView: View {
         }
     }
 
-    // Lock screen circular: streak number
     private var accessoryCircular: some View {
         VStack(spacing: 2) {
             Text(verbatim: "\(entry.streakCount)")
@@ -108,7 +114,6 @@ struct StreakWidgetView: View {
         }
     }
 
-    // Lock screen rectangular: streak + day %
     private var accessoryRectangular: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
@@ -131,7 +136,6 @@ struct StreakWidgetView: View {
         }
     }
 
-    // Home screen small: streak count + day progress
     private var systemSmall: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -186,7 +190,7 @@ struct TodayChecklistWidget: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Today")
-        .description("Today's task checklist.")
+        .description("Today's habit checklist.")
         .supportedFamilies([.systemMedium])
     }
 }
@@ -194,14 +198,14 @@ struct TodayChecklistWidget: Widget {
 struct TodayChecklistEntry: TimelineEntry {
     let date: Date
     let dayPct: Int
-    let tasks: [(name: String, done: Bool, label: String)]
+    let habits: [(name: String, done: Bool, label: String)]
 }
 
 struct TodayChecklistProvider: TimelineProvider {
     func placeholder(in context: Context) -> TodayChecklistEntry {
-        TodayChecklistEntry(date: .now, dayPct: 65, tasks: [
-            ("Push-ups", true, "100/100"),
-            ("Water", false, "64/128 oz"),
+        TodayChecklistEntry(date: .now, dayPct: 65, habits: [
+            ("Push-ups", true, "50/50 reps"),
+            ("Water", false, "32/64 oz"),
             ("Read", false, "—"),
         ])
     }
@@ -221,28 +225,41 @@ struct TodayChecklistProvider: TimelineProvider {
         do {
             let container = try ModelContainerFactory.create()
             let context = ModelContext(container)
-
-            let allTasks = try context.fetch(FetchDescriptor<TallyTask>())
-                .filter { !$0.archived }
-            let entries = try context.fetch(FetchDescriptor<LogEntry>())
             let now = Date()
+            let todayKey = localDateKey(now)
 
-            let day = dayCompletionFor(date: now, tasks: allTasks, entries: entries, now: now)
-            let dow = dayOfWeek(now)
-            let scheduled = allTasks.filter { $0.isScheduled(on: dow) }
+            // Fetch today's habit_days
+            let allHabitDays = try context.fetch(FetchDescriptor<HabitDay>())
+            let todayHDs = allHabitDays.filter { $0.date == todayKey }
 
-            let taskItems: [(String, Bool, String)] = scheduled.prefix(6).map { task in
-                let state = taskStateFor(task: task, date: startOfDay(now), entries: entries, now: now)
-                return (task.name, state.status == .done, state.label)
+            let total = todayHDs.count
+            let done = todayHDs.filter { $0.status == "done" }.count
+            let dayPct = total > 0 ? Int((Double(done) / Double(total) * 100).rounded()) : 0
+
+            // Look up habit names
+            let allHabits = try context.fetch(FetchDescriptor<Habit>())
+            let habitMap = Dictionary(allHabits.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let allUserHabits = try context.fetch(FetchDescriptor<UserHabit>())
+            let uhMap = Dictionary(allUserHabits.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+
+            let habitItems: [(String, Bool, String)] = todayHDs.prefix(6).compactMap { hd in
+                guard let uh = uhMap[hd.userHabitId],
+                      let habit = habitMap[uh.habitId] else { return nil }
+                let isDone = hd.status == "done"
+                let label: String
+                if isDone && (habit.type == .check || habit.type == .yesno) {
+                    label = "Done"
+                } else if hd.targetSnap != nil && hd.targetSnap! > 0 {
+                    label = "\(Int(hd.sum.rounded()))/\(Int(hd.targetSnap!)) \(hd.unitSnap ?? "")"
+                } else {
+                    label = isDone ? "Done" : "—"
+                }
+                return (habit.name, isDone, label)
             }
 
-            return TodayChecklistEntry(
-                date: now,
-                dayPct: Int((day.pct * 100).rounded()),
-                tasks: taskItems
-            )
+            return TodayChecklistEntry(date: now, dayPct: dayPct, habits: habitItems)
         } catch {
-            return TodayChecklistEntry(date: .now, dayPct: 0, tasks: [])
+            return TodayChecklistEntry(date: .now, dayPct: 0, habits: [])
         }
     }
 }
@@ -262,24 +279,24 @@ struct TodayChecklistView: View {
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
             }
 
-            ForEach(Array(entry.tasks.enumerated()), id: \.offset) { _, task in
+            ForEach(Array(entry.habits.enumerated()), id: \.offset) { _, habit in
                 HStack(spacing: 8) {
-                    Image(systemName: task.done ? "checkmark.circle.fill" : "circle")
+                    Image(systemName: habit.done ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 14))
-                        .foregroundStyle(task.done ? .green : .secondary)
-                    Text(task.name)
+                        .foregroundStyle(habit.done ? .green : .secondary)
+                    Text(habit.name)
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
                     Spacer()
-                    Text(task.label)
+                    Text(habit.label)
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .opacity(0.6)
                         .lineLimit(1)
                 }
             }
 
-            if entry.tasks.isEmpty {
-                Text("No tasks scheduled today")
+            if entry.habits.isEmpty {
+                Text("No habits scheduled today")
                     .font(.system(size: 12))
                     .opacity(0.5)
             }
@@ -298,10 +315,10 @@ struct TodayChecklistView: View {
 #Preview(as: .systemMedium) {
     TodayChecklistWidget()
 } timeline: {
-    TodayChecklistEntry(date: .now, dayPct: 65, tasks: [
+    TodayChecklistEntry(date: .now, dayPct: 65, habits: [
         ("Vitamins", true, "Done"),
-        ("Push-ups", true, "100/100 reps"),
-        ("Water", false, "64/128 oz"),
+        ("Push-ups", true, "50/50 reps"),
+        ("Water", false, "32/64 oz"),
         ("Read", false, "—"),
     ])
 }
