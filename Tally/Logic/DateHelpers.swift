@@ -61,12 +61,6 @@ func minutesSinceMidnight(_ date: Date) -> Int {
     return cal.component(.hour, from: date) * 60 + cal.component(.minute, from: date)
 }
 
-/// True if the task existed (was created on or before) the given date.
-func taskExistedOn(_ task: TallyTask, date: Date) -> Bool {
-    let taskCreatedDay = startOfDay(Date(timeIntervalSince1970: task.createdAt / 1000))
-    return startOfDay(date) >= taskCreatedDay
-}
-
 // MARK: - Display constants
 
 let dayLabels = ["M", "T", "W", "T", "F", "S", "S"]

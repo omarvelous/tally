@@ -37,11 +37,6 @@ struct ContentView: View {
                 .presentationDetents([.fraction(0.95)])
                 .presentationDragIndicator(.visible)
         }
-        .onAppear {
-            #if DEBUG
-            SeedData.seedIfNeeded(context: modelContext)
-            #endif
-        }
     }
 }
 
