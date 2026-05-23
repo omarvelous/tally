@@ -148,6 +148,9 @@ struct TasksScreen: View {
             .navigationDestination(item: $selectedUserHabitId) { uhId in
                 HabitDetailView(userHabitId: uhId)
             }
+            .navigationDestination(for: HabitDayNavID.self) { nav in
+                HabitDayLogView(habitDayId: nav.id)
+            }
         }
         .sheet(isPresented: $showHabitPicker) {
             HabitPickerView()

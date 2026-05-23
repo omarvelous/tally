@@ -78,9 +78,6 @@ struct HabitDetailView: View {
             .background(c.bg)
             .navigationTitle(resolved.habitName)
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: HabitDayNavID.self) { nav in
-                HabitDayLogView(habitDayId: nav.id)
-            }
         } else {
             Text("Habit not found")
                 .foregroundStyle(TallyColors.resolve(colorScheme).dim)

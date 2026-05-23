@@ -111,16 +111,16 @@ final class SyncEngine {
                 let existing = (try? context.fetch(descriptor))?.first
                 if let existing {
                     existing.sortOrder = ruh.sort_order
-                    existing.archivedAt = ruh.archived_at
-                    existing.updatedAt = ruh.updated_at
+                    existing.archivedAt = ruh.archivedAtMs
+                    existing.updatedAt = ruh.updatedAtMs
                 } else {
                     context.insert(UserHabit(
                         id: ruh.id,
                         profileId: ruh.profile_id,
                         habitId: ruh.habit_id,
                         sortOrder: ruh.sort_order,
-                        archivedAt: ruh.archived_at,
-                        createdAt: ruh.created_at
+                        archivedAt: ruh.archivedAtMs,
+                        createdAt: ruh.createdAtMs
                     ))
                 }
             }
@@ -204,7 +204,7 @@ final class SyncEngine {
                             id: rl.id,
                             habitDayId: rl.habit_day_id,
                             value: rl.value,
-                            loggedAt: rl.logged_at,
+                            loggedAt: rl.loggedAtMs,
                             time: rl.time,
                             timezone: rl.timezone
                         ))
@@ -231,7 +231,7 @@ final class SyncEngine {
                     existing.overdue = rs.overdue
                     existing.pct = rs.pct
                     existing.streakDay = rs.streak_day
-                    existing.updatedAt = rs.updated_at
+                    existing.updatedAt = rs.updatedAtMs
                 } else {
                     context.insert(DaySummary(
                         id: rs.id,
@@ -639,9 +639,13 @@ struct RemoteUserHabit: Decodable {
     let profile_id: String
     let habit_id: String
     let sort_order: Int
-    let archived_at: Double?
-    let created_at: Double
-    let updated_at: Double
+    let archived_at: String?   // ISO 8601 timestamptz, nil = active
+    let created_at: String
+    let updated_at: String
+
+    var archivedAtMs: Double? { archived_at.map { parseISO($0) } }
+    var createdAtMs: Double { parseISO(created_at) }
+    var updatedAtMs: Double { parseISO(updated_at) }
 }
 
 struct RemoteUserHabitSchedule: Decodable {
@@ -670,16 +674,15 @@ struct RemoteLogEntry: Decodable {
     let id: String
     let habit_day_id: String
     let value: Double
-    let logged_at: Double
+    let logged_at: String    // ISO 8601 timestamptz from Supabase
     let timezone: String
+
+    var loggedAtMs: Double { parseISO(logged_at) }
 
     /// Derive "HH:MM" from logged_at timestamp
     var time: String {
-        let date = Date(timeIntervalSince1970: logged_at / 1000)
-        let cal = Calendar.current
-        let h = cal.component(.hour, from: date)
-        let m = cal.component(.minute, from: date)
-        return String(format: "%02d:%02d", h, m)
+        let date = Date(timeIntervalSince1970: loggedAtMs / 1000)
+        return localTimeKey(date)
     }
 }
 
@@ -693,7 +696,25 @@ struct RemoteDaySummary: Decodable {
     let overdue: Int
     let pct: Double
     let streak_day: Bool
-    let updated_at: Double
+    let updated_at: String
+
+    var updatedAtMs: Double { parseISO(updated_at) }
+}
+
+// MARK: - ISO 8601 timestamp parser
+
+private func parseISO(_ s: String) -> Double {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: s) {
+        return date.timeIntervalSince1970 * 1000
+    }
+    // Fallback without fractional seconds
+    formatter.formatOptions = [.withInternetDateTime]
+    if let date = formatter.date(from: s) {
+        return date.timeIntervalSince1970 * 1000
+    }
+    return Date().timeIntervalSince1970 * 1000
 }
 
 // MARK: - Push DTOs (Encodable — for pushing to Supabase)
